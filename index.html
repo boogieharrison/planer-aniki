@@ -444,41 +444,23 @@ async function verifyPin(){
   APP_PIN_HASH = hash;
 
   try {
-    // Klient bez PINa — do sprawdzenia czy wiersz istnieje i czy ma pin_hash
-    var tmpClient = supabase.createClient(SUPA_URL, SUPA_KEY);
-    var check = await tmpClient.from(TABLE).select('id, pin_hash').eq('id', ROW_ID).maybeSingle();
+    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+      global: { headers: { 'x-app-pin': hash } }
+    });
 
-    if(!check.data){
-      // Wiersz nie istnieje — pierwszy raz, utwórz z PINem
-      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
-        global: { headers: { 'x-app-pin': hash } }
-      });
+    // Próba pobrania danych — RLS przepuści tylko z poprawnym PINem
+    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).maybeSingle();
+
+    if(res.data && res.data.data){
+      // PIN poprawny — dane załadowane
+      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+    } else if(!res.data && !res.error){
+      // Wiersz nie istnieje LUB RLS go ukrył (zły PIN)
+      // Sprawdź: spróbuj insert — jeśli wiersz już jest, to zły PIN
       var insertRes = await supa.from(TABLE).insert({id: ROW_ID, data: S, pin_hash: hash});
       if(insertRes.error){
-        document.getElementById('pin-error').textContent = 'Błąd tworzenia danych: ' + insertRes.error.message;
-        return;
-      }
-    } else if(!check.data.pin_hash){
-      // Wiersz istnieje ale bez PINa — ustaw PIN (migracja ze starej wersji)
-      var migrateClient = supabase.createClient(SUPA_URL, SUPA_KEY);
-      await migrateClient.from(TABLE).update({pin_hash: hash}).eq('id', ROW_ID);
-      // Teraz połącz z PINem
-      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
-        global: { headers: { 'x-app-pin': hash } }
-      });
-      var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
-      if(res.data && res.data.data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-          calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
-      }
-    } else {
-      // Wiersz istnieje z PINem — weryfikacja
-      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
-        global: { headers: { 'x-app-pin': hash } }
-      });
-      var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
-      if(res.error){
-        // RLS odrzuciło — zły PIN
+        // INSERT się nie udał — wiersz istnieje ale PIN nie pasuje
         document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
         APP_PIN_HASH = null;
         supa = null;
@@ -486,13 +468,15 @@ async function verifyPin(){
         inp.focus();
         return;
       }
-      if(res.data && res.data.data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-          calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
-      }
+      // INSERT się udał — to było pierwsze uruchomienie, PIN ustawiony
+    } else if(res.error){
+      document.getElementById('pin-error').textContent = 'Błąd połączenia: ' + res.error.message;
+      APP_PIN_HASH = null;
+      supa = null;
+      return;
     }
 
-    // PIN OK — zapisz hash w localStorage i pokaż aplikację
+    // PIN OK
     try{localStorage.setItem('planer_pin_hash', hash)}catch(e){}
     showApp();
   } catch(e){
