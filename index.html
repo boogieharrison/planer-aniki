@@ -140,10 +140,8 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .cal-dot{font-size:.65rem;padding:.05rem .3rem;border-radius:4px;margin-bottom:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .cal-dot.t{background:var(--blue-bg);color:var(--blue)}
 .cal-dot.d{background:var(--red-bg);color:var(--red)}
-.cal-dot.apple{background:#e8f5e9;color:#2e7d32}
 .cal-legend{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.85rem;font-size:.7rem;color:var(--ink3);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .cal-legend span::before{content:'▪ ';font-size:.6rem}
-.apple-event-chip{font-size:.7rem;padding:.15rem .5rem;border-radius:99px;background:#e8f5e9;color:#2e7d32;margin-bottom:.2rem;display:inline-block;font-weight:500;letter-spacing:.02em;margin-right:.3rem}
 
 /* ── github instructions ── */
 .gh-box{background:var(--accent-bg);border:1px solid var(--line);padding:1.25rem 1.5rem;margin-top:1.5rem}
@@ -327,15 +325,34 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
   <div id="calendar" class="section">
     <h2>Kalendarz</h2>
     <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
-      <div style="display:flex;align-items:flex-end;gap:.5rem;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
-          <label class="lbl">Link ICS (Apple Calendar / Google)</label>
-          <input type="text" id="ics-url" placeholder="https://p123-caldav.icloud.com/..." style="font-size:.8rem">
+      <h3 style="margin-bottom:.75rem">📅 Kalendarze zewnętrzne (ICS)</h3>
+      <div id="ics-feeds-list"></div>
+      <div style="display:flex;align-items:flex-end;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
+        <div style="flex:1;min-width:120px">
+          <label class="lbl">Nazwa</label>
+          <input type="text" id="ics-new-name" placeholder="np. Uczelnia" style="font-size:.8rem">
         </div>
-        <button class="btn btn-sage btn-sm" onclick="saveIcsUrl()" style="margin-bottom:1px">Zapisz</button>
-        <button class="btn btn-sm" onclick="fetchAppleEvents()" style="margin-bottom:1px">⟳ Odśwież</button>
+        <div style="flex:2;min-width:180px">
+          <label class="lbl">Link ICS</label>
+          <input type="text" id="ics-new-url" placeholder="https://..." style="font-size:.8rem">
+        </div>
+        <div style="width:50px">
+          <label class="lbl">Kolor</label>
+          <select id="ics-new-color" style="font-size:.8rem;padding:.45rem .3rem">
+            <option value="#2e7d32">🟢</option>
+            <option value="#6a1b9a">🟣</option>
+            <option value="#e65100">🟠</option>
+            <option value="#00838f">🔵</option>
+            <option value="#c62828">🔴</option>
+            <option value="#4e342e">🟤</option>
+          </select>
+        </div>
+        <button class="btn btn-sage btn-sm" onclick="addIcsFeed()" style="margin-bottom:1px">+ Dodaj</button>
       </div>
-      <div id="ics-status" style="font-size:.7rem;color:var(--ink3);margin-top:.4rem"></div>
+      <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
+        <div id="ics-status" style="font-size:.7rem;color:var(--ink3);flex:1"></div>
+        <button class="btn btn-sm" onclick="fetchAllIcsFeeds()" style="font-size:.7rem">⟳ Odśwież wszystkie</button>
+      </div>
     </div>
     <div class="cal-nav">
       <button class="btn btn-sm" onclick="changeMonth(-1)">←</button>
@@ -344,10 +361,9 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
     </div>
     <div class="cal-grid" id="cal-headers"></div>
     <div class="cal-grid" id="cal-body" style="margin-top:3px"></div>
-    <div class="cal-legend">
+    <div class="cal-legend" id="cal-legend">
       <span style="color:#185fa5">Zadanie</span>
       <span style="color:var(--red)">Termin</span>
-      <span style="color:#2e7d32">Apple Calendar</span>
     </div>
   </div>
 </div>
@@ -485,7 +501,7 @@ async function verifyPin(){
     if(result === 'ok'){
       var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
       if(dataRes.data && dataRes.data.data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsUrl:'',
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
           calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
       }
     }
@@ -511,7 +527,7 @@ function showApp(){
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:TABLE},function(payload){
       var data = payload.new && payload.new.data;
       if(data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsUrl:'',
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
           calY:new Date().getFullYear(),calM:new Date().getMonth()}, data);
         refreshAll();
       }
@@ -545,7 +561,7 @@ async function autoLogin(){
     });
     var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
     if(dataRes.data && dataRes.data.data){
-      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsUrl:'',
+      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
         calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
     }
     showApp();
@@ -566,7 +582,7 @@ async function checkFirstRun(){
 }
 
 // ── STATE ──────────────────────────────────────────────
-var S = {tasks:[],deadlines:[],books:[],backlog:[],icsUrl:'',
+var S = {tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
          calY:new Date().getFullYear(),calM:new Date().getMonth()};
 var TODAY = new Date().toISOString().split('T')[0];
 
@@ -592,7 +608,7 @@ function save(){
 
 function loadLocal(){
   try{var d=localStorage.getItem('zspl2');
-    if(d)S=Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsUrl:'',
+    if(d)S=Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
       calY:new Date().getFullYear(),calM:new Date().getMonth()},JSON.parse(d));
   }catch(e){}
 }
@@ -613,8 +629,7 @@ function setSyncStatus(st){
 
 function refreshAll(){
   renderTasks();renderSidebarBacklog();renderBacklog();renderDeadlines();renderBooks();
-  // Auto-fetch Apple Calendar if URL is set
-  if(S.icsUrl && appleEvents.length === 0) fetchAppleEvents();
+  if((S.icsFeeds||[]).length > 0 && icsEvents.length === 0) fetchAllIcsFeeds();
 }
 
 // ── tabs ───────────────────────────────────────────────
@@ -623,8 +638,7 @@ function showTab(n){
   document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
   document.getElementById(n).classList.add('active');
   if(n==='calendar'){
-    var icsInp=document.getElementById('ics-url');
-    if(icsInp&&S.icsUrl)icsInp.value=S.icsUrl;
+    renderIcsFeeds();updateCalLegend();
     renderCalendar();
   }
   if(n==='tasks'){renderTasks();renderSidebarBacklog();}
@@ -861,9 +875,9 @@ function renderTasks(){
       dlChips+='<div class="day-deadline-chip">⚑ '+dl.name+'</div>';
     });
 
-    var appleChips='';
-    getAppleEventsForDate(ds).forEach(function(e){
-      appleChips+='<div class="apple-event-chip">'+(e.timeFrom?e.timeFrom+(e.timeTo?'–'+e.timeTo:'')+' ':' ')+e.summary+'</div>';
+    var icsChips='';
+    getIcsEventsForDate(ds).forEach(function(e){
+      icsChips+='<div style="font-size:.7rem;padding:.15rem .5rem;border-radius:99px;background:'+e.color+'18;color:'+e.color+';margin-bottom:.2rem;display:inline-block;font-weight:500;letter-spacing:.02em;margin-right:.3rem">'+(e.timeFrom?e.timeFrom+(e.timeTo?'–'+e.timeTo:'')+' ':' ')+e.summary+'</div>';
     });
 
     var rowHtml='<div class="'+cls+'" id="dr-'+ds+'">';
@@ -875,7 +889,7 @@ function renderTasks(){
     }
     rowHtml+='<div class="day-content" id="dc-'+ds+'" ondragover="onDayDragOver(event,\''+ds+'\')" ondragleave="onDayDragLeave(\''+ds+'\')" ondrop="onDayDrop(event,\''+ds+'\')">';
     if(dlChips)rowHtml+=dlChips;
-    if(appleChips)rowHtml+='<div style="margin-bottom:.25rem">'+appleChips+'</div>';
+    if(icsChips)rowHtml+='<div style="margin-bottom:.25rem">'+icsChips+'</div>';
     if(tasksHtml)rowHtml+='<div class="day-tasks-list">'+tasksHtml+'</div>';
     rowHtml+='<div class="day-add-row" id="dar-'+ds+'">';
     rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ dodaj zadanie..." ';
@@ -1109,54 +1123,81 @@ function deleteBacklogFromModal(){
   save();renderBacklog();renderSidebarBacklog();
 }
 
-// ── APPLE CALENDAR (ICS) ──────────────────────────────
-var appleEvents = []; // {summary, date, timeFrom, timeTo}
+// ── EXTERNAL CALENDARS (ICS) ──────────────────────────
+var icsEvents = []; // {summary, date, timeFrom, timeTo, color, feedName, feedId}
 var EDGE_FN_URL = SUPA_URL + '/functions/v1/ics-proxy';
 
-function saveIcsUrl(){
-  var url = document.getElementById('ics-url').value.trim();
-  if(!url){
-    S.icsUrl = '';
-    appleEvents = [];
-    save();renderCalendar();renderTasks();
-    document.getElementById('ics-status').textContent = 'Link usunięty.';
-    return;
-  }
-  S.icsUrl = url;
-  save();
-  fetchAppleEvents();
+function addIcsFeed(){
+  var name = document.getElementById('ics-new-name').value.trim();
+  var url = document.getElementById('ics-new-url').value.trim();
+  var color = document.getElementById('ics-new-color').value;
+  if(!name || !url){alert('Podaj nazwę i link ICS.');return;}
+  if(!S.icsFeeds) S.icsFeeds = [];
+  S.icsFeeds.push({id: Date.now(), name: name, url: url, color: color});
+  document.getElementById('ics-new-name').value = '';
+  document.getElementById('ics-new-url').value = '';
+  save();renderIcsFeeds();
+  fetchSingleFeed(S.icsFeeds[S.icsFeeds.length - 1]);
 }
-
-async function fetchAppleEvents(){
-  if(!S.icsUrl){return;}
-  document.getElementById('ics-status').textContent = '⟳ Pobieranie kalendarza...';
+function removeIcsFeed(id){
+  S.icsFeeds = (S.icsFeeds||[]).filter(function(f){return f.id !== id});
+  icsEvents = icsEvents.filter(function(e){return e.feedId !== id});
+  save();renderIcsFeeds();renderCalendar();renderTasks();updateCalLegend();
+}
+function renderIcsFeeds(){
+  var el = document.getElementById('ics-feeds-list');
+  if(!el) return;
+  var feeds = S.icsFeeds || [];
+  if(!feeds.length){el.innerHTML='';return;}
+  var h = '';
+  feeds.forEach(function(f){
+    h += '<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:.3rem;background:var(--bg)">';
+    h += '<span style="width:10px;height:10px;border-radius:50%;background:'+f.color+';flex-shrink:0"></span>';
+    h += '<span style="font-size:.8rem;font-weight:600;flex:1">'+f.name+'</span>';
+    h += '<span style="font-size:.7rem;color:var(--ink3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.url.substring(0,40)+'…</span>';
+    h += '<button class="btn btn-sm" onclick="removeIcsFeed('+f.id+')" style="color:var(--ink3);padding:.2rem .4rem;font-size:.7rem">✕</button>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+async function fetchAllIcsFeeds(){
+  var feeds = S.icsFeeds || [];
+  if(!feeds.length) return;
+  icsEvents = [];
+  document.getElementById('ics-status').textContent = '⟳ Pobieranie ' + feeds.length + ' kalendarzy...';
+  var loaded = 0, failed = 0;
+  for(var i = 0; i < feeds.length; i++){
+    var ok = await fetchSingleFeed(feeds[i]);
+    if(ok) loaded++; else failed++;
+  }
+  var msg = '✓ Załadowano ' + loaded + ' kalendarzy';
+  if(failed) msg += ' · ✕ ' + failed + ' błędów';
+  document.getElementById('ics-status').textContent = msg;
+  renderCalendar();renderTasks();updateCalLegend();
+}
+async function fetchSingleFeed(feed){
   try {
     var res = await fetch(EDGE_FN_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPA_KEY},
-      body: JSON.stringify({url: S.icsUrl})
+      body: JSON.stringify({url: feed.url})
     });
-    if(!res.ok){
-      document.getElementById('ics-status').textContent = '✕ Błąd pobierania (HTTP ' + res.status + ')';
-      return;
-    }
+    if(!res.ok) return false;
     var icsText = await res.text();
-    appleEvents = parseICS(icsText);
-    document.getElementById('ics-status').textContent = '✓ Załadowano ' + appleEvents.length + ' wydarzeń';
-    renderCalendar();renderTasks();
-  } catch(e){
-    console.error('ICS fetch error:', e);
-    document.getElementById('ics-status').textContent = '✕ Błąd połączenia';
-  }
+    var parsed = parseICS(icsText);
+    icsEvents = icsEvents.filter(function(e){return e.feedId !== feed.id});
+    parsed.forEach(function(ev){ev.color=feed.color;ev.feedName=feed.name;ev.feedId=feed.id;icsEvents.push(ev)});
+    document.getElementById('ics-status').textContent = '✓ ' + feed.name + ': ' + parsed.length + ' wydarzeń';
+    renderCalendar();renderTasks();updateCalLegend();
+    return true;
+  } catch(e){console.error('ICS fetch error for '+feed.name+':',e);return false;}
 }
-
 function parseICS(text){
   var events = [];
   var blocks = text.split('BEGIN:VEVENT');
   for(var i = 1; i < blocks.length; i++){
     var block = blocks[i].split('END:VEVENT')[0];
     var summary = '', dtstart = '', dtend = '';
-    // unfold lines (RFC 5545: lines starting with space/tab are continuations)
     block = block.replace(/\r\n[ \t]/g, '');
     var lines = block.split(/\r?\n/);
     for(var j = 0; j < lines.length; j++){
@@ -1166,41 +1207,40 @@ function parseICS(text){
       if(line.match(/^DTEND[;:]/)) dtend = line.replace(/^DTEND[^:]*:/, '');
     }
     if(!summary || !dtstart) continue;
-    // parse date: 20260315T090000Z or 20260315
     var dateStr = '', timeFrom = '', timeTo = '';
     if(dtstart.length >= 8){
-      var y = dtstart.substring(0,4), m = dtstart.substring(4,6), d = dtstart.substring(6,8);
-      dateStr = y + '-' + m + '-' + d;
+      var y=dtstart.substring(0,4),m=dtstart.substring(4,6),d=dtstart.substring(6,8);
+      dateStr = y+'-'+m+'-'+d;
       if(dtstart.length >= 15){
-        var hh = dtstart.substring(9,11), mm = dtstart.substring(11,13);
-        // handle UTC → local (rough: just parse as UTC and convert)
-        if(dtstart.indexOf('Z') !== -1){
-          var utc = new Date(Date.UTC(parseInt(y),parseInt(m)-1,parseInt(d),parseInt(hh),parseInt(mm)));
-          dateStr = utc.getFullYear()+'-'+String(utc.getMonth()+1).padStart(2,'0')+'-'+String(utc.getDate()).padStart(2,'0');
-          timeFrom = String(utc.getHours()).padStart(2,'0')+':'+String(utc.getMinutes()).padStart(2,'0');
-        } else {
-          timeFrom = hh + ':' + mm;
-        }
+        var hh=dtstart.substring(9,11),mm=dtstart.substring(11,13);
+        if(dtstart.indexOf('Z')!==-1){
+          var utc=new Date(Date.UTC(parseInt(y),parseInt(m)-1,parseInt(d),parseInt(hh),parseInt(mm)));
+          dateStr=utc.getFullYear()+'-'+String(utc.getMonth()+1).padStart(2,'0')+'-'+String(utc.getDate()).padStart(2,'0');
+          timeFrom=String(utc.getHours()).padStart(2,'0')+':'+String(utc.getMinutes()).padStart(2,'0');
+        } else {timeFrom=hh+':'+mm;}
       }
     }
-    if(dtend && dtend.length >= 15){
-      var ey = dtend.substring(0,4), em = dtend.substring(4,6), ed = dtend.substring(6,8);
-      var ehh = dtend.substring(9,11), emm = dtend.substring(11,13);
-      if(dtend.indexOf('Z') !== -1){
-        var utcEnd = new Date(Date.UTC(parseInt(ey),parseInt(em)-1,parseInt(ed),parseInt(ehh),parseInt(emm)));
-        timeTo = String(utcEnd.getHours()).padStart(2,'0')+':'+String(utcEnd.getMinutes()).padStart(2,'0');
-      } else {
-        timeTo = ehh + ':' + emm;
-      }
+    if(dtend&&dtend.length>=15){
+      var ey=dtend.substring(0,4),em=dtend.substring(4,6),ed=dtend.substring(6,8);
+      var ehh=dtend.substring(9,11),emm=dtend.substring(11,13);
+      if(dtend.indexOf('Z')!==-1){
+        var utcEnd=new Date(Date.UTC(parseInt(ey),parseInt(em)-1,parseInt(ed),parseInt(ehh),parseInt(emm)));
+        timeTo=String(utcEnd.getHours()).padStart(2,'0')+':'+String(utcEnd.getMinutes()).padStart(2,'0');
+      } else {timeTo=ehh+':'+emm;}
     }
-    // handle recurring events - skip for now, just add single instances
-    events.push({summary: summary, date: dateStr, timeFrom: timeFrom, timeTo: timeTo});
+    events.push({summary:summary,date:dateStr,timeFrom:timeFrom,timeTo:timeTo});
   }
   return events;
 }
-
-function getAppleEventsForDate(ds){
-  return appleEvents.filter(function(e){return e.date === ds});
+function getIcsEventsForDate(ds){
+  return icsEvents.filter(function(e){return e.date===ds});
+}
+function updateCalLegend(){
+  var el=document.getElementById('cal-legend');
+  if(!el)return;
+  var h='<span style="color:#185fa5">Zadanie</span><span style="color:var(--red)">Termin</span>';
+  (S.icsFeeds||[]).forEach(function(f){h+='<span style="color:'+f.color+'">'+f.name+'</span>'});
+  el.innerHTML=h;
 }
 
 // ── CALENDAR ───────────────────────────────────────────
@@ -1227,7 +1267,7 @@ function renderCalendar(){
     var dots='';
     S.tasks.filter(function(t){return!t.done&&t.date===ds}).slice(0,2).forEach(function(t){dots+='<div class="cal-dot t">'+t.from+' '+t.name.slice(0,10)+'</div>'});
     S.deadlines.filter(function(d){return d.date===ds}).slice(0,1).forEach(function(d){dots+='<div class="cal-dot d">⚑ '+d.name.slice(0,10)+'</div>'});
-    getAppleEventsForDate(ds).slice(0,2).forEach(function(e){dots+='<div class="cal-dot apple">'+(e.timeFrom?e.timeFrom+' ':'')+e.summary.slice(0,10)+'</div>'});
+    getIcsEventsForDate(ds).slice(0,2).forEach(function(e){dots+='<div class="cal-dot" style="background:'+e.color+'15;color:'+e.color+'">'+(e.timeFrom?e.timeFrom+' ':'')+e.summary.slice(0,10)+'</div>'});
     return'<div class="cal-cell'+(isT?' today':'')+'" onclick="calClick(\''+ds+'\')"><div class="cal-num">'+c.day+'</div>'+dots+'</div>';
   }).join('');
 }
