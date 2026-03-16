@@ -212,7 +212,25 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 </style>
 </head>
 <body>
-<div class="app">
+<!-- ════ PIN LOCK SCREEN ════ -->
+<div id="pin-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:2rem">
+  <div style="text-align:center;max-width:320px;width:100%">
+    <div style="font-size:1.5rem;font-weight:700;letter-spacing:-.01em;text-transform:uppercase;margin-bottom:.25rem">Planer <span style="font-weight:400;color:var(--ink2)">Aniki</span></div>
+    <div style="font-size:.7rem;color:var(--ink3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2.5rem">Wpisz PIN aby kontynuować</div>
+    <div style="display:flex;gap:.5rem;justify-content:center;margin-bottom:1.25rem" id="pin-dots">
+      <input type="password" id="pin-input" maxlength="20" autocomplete="off" placeholder="••••"
+        style="width:180px;text-align:center;padding:.7rem 1rem;border:2px solid var(--line);border-radius:var(--r);font-family:'Syne',sans-serif;font-size:1.1rem;letter-spacing:.3em;transition:border-color .15s"
+        onkeydown="if(event.key==='Enter')verifyPin()">
+    </div>
+    <button class="btn btn-sage" onclick="verifyPin()" style="width:180px;padding:.65rem 1rem">Wejdź</button>
+    <div id="pin-error" style="margin-top:1rem;font-size:.775rem;color:var(--red);min-height:1.2em"></div>
+    <div id="pin-setup-hint" style="margin-top:1.5rem;font-size:.7rem;color:var(--ink3);line-height:1.6;display:none">
+      Pierwszy raz? Wpisz nowy PIN — zostanie ustawiony jako Twoje hasło dostępu.
+    </div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
   <header>
     <h1>Planer <em>Aniki</em></h1>
     <span id="sync-status" style="margin-left:auto;font-size:.7rem;font-weight:600;letter-spacing:.06em;color:var(--ink3)">⟳ Łączenie...</span>
@@ -384,59 +402,135 @@ var TABLE     = 'planer_data';
 var ROW_ID    = 1; // jeden wiersz dla całej aplikacji
 var supa      = null;
 var _saveTimer= null;
+var APP_PIN_HASH = null; // SHA-256 hash PINu
+
+// ── PIN LOGIC ─────────────────────────────────────────
+async function sha256(text){
+  var enc = new TextEncoder().encode(text);
+  var buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
+}
+
+async function verifyPin(){
+  var inp = document.getElementById('pin-input');
+  var pin = inp.value.trim();
+  if(!pin || pin.length < 3){
+    document.getElementById('pin-error').textContent = 'PIN musi mieć co najmniej 3 znaki.';
+    return;
+  }
+  var hash = await sha256(pin);
+  APP_PIN_HASH = hash;
+
+  // Spróbuj połączyć z Supabase z tym hashem
+  try {
+    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+      global: { headers: { 'x-app-pin': hash } }
+    });
+
+    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+
+    if(res.error && res.error.code === 'PGRST116'){
+      // Wiersz nie istnieje — pierwszy raz, utwórz z tym PINem
+      var insertRes = await supa.from(TABLE).insert({id: ROW_ID, data: S, pin_hash: hash});
+      if(insertRes.error){
+        document.getElementById('pin-error').textContent = 'Błąd tworzenia danych: ' + insertRes.error.message;
+        return;
+      }
+    } else if(res.error){
+      // RLS odrzuciło — zły PIN
+      document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
+      APP_PIN_HASH = null;
+      supa = null;
+      inp.value = '';
+      inp.focus();
+      return;
+    } else if(res.data && res.data.data){
+      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+    }
+
+    // PIN OK — zapisz hash w localStorage i pokaż aplikację
+    try{localStorage.setItem('planer_pin_hash', hash)}catch(e){}
+    showApp();
+  } catch(e){
+    console.error('Pin verify error:', e);
+    document.getElementById('pin-error').textContent = 'Błąd połączenia. Sprawdź internet.';
+  }
+}
+
+function showApp(){
+  document.getElementById('pin-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  _initialized = true;
+  setSyncStatus('ok');
+  refreshAll();
+
+  // realtime sync
+  supa.channel('planer-changes')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:TABLE},function(payload){
+      var data = payload.new && payload.new.data;
+      if(data){
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+          calY:new Date().getFullYear(),calM:new Date().getMonth()}, data);
+        refreshAll();
+      }
+    }).subscribe();
+}
+
+// Próba automatycznego logowania z zapamiętanego PINu
+async function autoLogin(){
+  var saved = null;
+  try{saved = localStorage.getItem('planer_pin_hash')}catch(e){}
+  if(!saved){
+    // Pokaż ekran PINu i sprawdź czy to pierwsze uruchomienie
+    document.getElementById('pin-screen').style.display = 'flex';
+    checkFirstRun();
+    return;
+  }
+  APP_PIN_HASH = saved;
+  try {
+    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+      global: { headers: { 'x-app-pin': saved } }
+    });
+    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+    if(res.error){
+      // Zapisany PIN nieaktualny — wymuś ponowne wpisanie
+      try{localStorage.removeItem('planer_pin_hash')}catch(e){}
+      document.getElementById('pin-screen').style.display = 'flex';
+      document.getElementById('pin-error').textContent = 'Sesja wygasła — wpisz PIN ponownie.';
+      return;
+    }
+    if(res.data && res.data.data){
+      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+    }
+    showApp();
+  } catch(e){
+    console.error('Auto-login error:', e);
+    // Offline fallback
+    loadLocal();
+    _initialized = true;
+    document.getElementById('pin-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    setSyncStatus('error');
+    refreshAll();
+  }
+}
+
+async function checkFirstRun(){
+  try {
+    var tmp = supabase.createClient(SUPA_URL, SUPA_KEY);
+    var res = await tmp.from(TABLE).select('id').eq('id', ROW_ID).maybeSingle();
+    if(!res.data){
+      document.getElementById('pin-setup-hint').style.display = 'block';
+    }
+  }catch(e){}
+}
 
 // ── STATE ──────────────────────────────────────────────
 var S = {tasks:[],deadlines:[],books:[],backlog:[],
          calY:new Date().getFullYear(),calM:new Date().getMonth()};
 var TODAY = new Date().toISOString().split('T')[0];
-
-// ── SUPABASE INIT ──────────────────────────────────────
-function initSupabase(){
-  try {
-    supa = supabase.createClient(SUPA_URL, SUPA_KEY);
-    setSyncStatus('loading');
-    loadFromSupabase();
-    // realtime sync
-    supa.channel('planer-changes')
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:TABLE},function(payload){
-        var data = payload.new && payload.new.data;
-        if(data){
-          S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-            calY:new Date().getFullYear(),calM:new Date().getMonth()}, data);
-          refreshAll();
-        }
-      }).subscribe();
-  } catch(e){
-    console.error('Supabase init error:',e);
-    setSyncStatus('error');
-    loadLocal();
-    _initialized = true;
-    refreshAll();
-  }
-}
-
-async function loadFromSupabase(){
-  try {
-    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
-    if(res.error && res.error.code === 'PGRST116'){
-      // wiersz nie istnieje – utwórz go z aktualnym (pustym) stanem
-      await supa.from(TABLE).insert({id: ROW_ID, data: S});
-    } else if(res.data && res.data.data){
-      // dane istnieją – załaduj je, NIE nadpisuj
-      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
-    }
-    _initialized = true;
-    setSyncStatus('ok');
-    refreshAll();
-  } catch(e){
-    console.error('Supabase load error:',e);
-    setSyncStatus('error');
-    loadLocal();
-    _initialized = true;
-    refreshAll();
-  }
-}
 
 var _initialized = false;
 
@@ -449,7 +543,7 @@ function save(){
   _saveTimer = setTimeout(async function(){
     setSyncStatus('saving');
     try {
-      await supa.from(TABLE).upsert({id: ROW_ID, data: JSON.parse(JSON.stringify(S))});
+      await supa.from(TABLE).upsert({id: ROW_ID, data: JSON.parse(JSON.stringify(S)), pin_hash: APP_PIN_HASH});
       setSyncStatus('ok');
     } catch(e){
       console.error('Supabase save error:',e);
@@ -1006,7 +1100,7 @@ function saveEditModal(){
 }
 
 // ── init ───────────────────────────────────────────────
-initSupabase();
+autoLogin();
 
 </script>
 </body>
