@@ -377,6 +377,28 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
   </div>
 </div>
 
+<!-- ════ EDIT DEADLINE MODAL ════ -->
+<div id="edit-deadline-modal" class="modal-overlay" style="display:none" onclick="closeDeadlineModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>✏️ Edytuj termin</h3>
+    <div class="modal-row"><label class="lbl">Nazwa etapu</label><input type="text" id="edm-name"></div>
+    <div class="modal-row"><label class="lbl">Termin oddania</label><input type="date" id="edm-date"></div>
+    <div class="modal-row"><label class="lbl">Opis (opcjonalnie)</label><input type="text" id="edm-desc" placeholder=""></div>
+    <div class="modal-row"><label class="lbl">Status</label>
+      <select id="edm-status">
+        <option value="pending">W toku</option>
+        <option value="done">Gotowe</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" style="color:var(--red);border-color:var(--red)" onclick="deleteDeadlineFromModal()">Usuń</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="closeDeadlineModal()">Anuluj</button>
+      <button class="btn btn-sage" onclick="saveDeadlineModal()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ EDIT TASK MODAL ════ -->
 <div id="edit-modal" class="modal-overlay" style="display:none" onclick="closeEditModal(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
@@ -421,32 +443,53 @@ async function verifyPin(){
   var hash = await sha256(pin);
   APP_PIN_HASH = hash;
 
-  // Spróbuj połączyć z Supabase z tym hashem
   try {
-    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
-      global: { headers: { 'x-app-pin': hash } }
-    });
+    // Klient bez PINa — do sprawdzenia czy wiersz istnieje i czy ma pin_hash
+    var tmpClient = supabase.createClient(SUPA_URL, SUPA_KEY);
+    var check = await tmpClient.from(TABLE).select('id, pin_hash').eq('id', ROW_ID).maybeSingle();
 
-    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
-
-    if(res.error && res.error.code === 'PGRST116'){
-      // Wiersz nie istnieje — pierwszy raz, utwórz z tym PINem
+    if(!check.data){
+      // Wiersz nie istnieje — pierwszy raz, utwórz z PINem
+      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+        global: { headers: { 'x-app-pin': hash } }
+      });
       var insertRes = await supa.from(TABLE).insert({id: ROW_ID, data: S, pin_hash: hash});
       if(insertRes.error){
         document.getElementById('pin-error').textContent = 'Błąd tworzenia danych: ' + insertRes.error.message;
         return;
       }
-    } else if(res.error){
-      // RLS odrzuciło — zły PIN
-      document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
-      APP_PIN_HASH = null;
-      supa = null;
-      inp.value = '';
-      inp.focus();
-      return;
-    } else if(res.data && res.data.data){
-      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+    } else if(!check.data.pin_hash){
+      // Wiersz istnieje ale bez PINa — ustaw PIN (migracja ze starej wersji)
+      var migrateClient = supabase.createClient(SUPA_URL, SUPA_KEY);
+      await migrateClient.from(TABLE).update({pin_hash: hash}).eq('id', ROW_ID);
+      // Teraz połącz z PINem
+      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+        global: { headers: { 'x-app-pin': hash } }
+      });
+      var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+      if(res.data && res.data.data){
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+          calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+      }
+    } else {
+      // Wiersz istnieje z PINem — weryfikacja
+      supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+        global: { headers: { 'x-app-pin': hash } }
+      });
+      var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+      if(res.error){
+        // RLS odrzuciło — zły PIN
+        document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
+        APP_PIN_HASH = null;
+        supa = null;
+        inp.value = '';
+        inp.focus();
+        return;
+      }
+      if(res.data && res.data.data){
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+          calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+      }
     }
 
     // PIN OK — zapisz hash w localStorage i pokaż aplikację
@@ -518,13 +561,10 @@ async function autoLogin(){
 }
 
 async function checkFirstRun(){
-  try {
-    var tmp = supabase.createClient(SUPA_URL, SUPA_KEY);
-    var res = await tmp.from(TABLE).select('id').eq('id', ROW_ID).maybeSingle();
-    if(!res.data){
-      document.getElementById('pin-setup-hint').style.display = 'block';
-    }
-  }catch(e){}
+  // Hint jest widoczny — verifyPin sam rozpozna czy to setup czy weryfikacja
+  // Nie potrzebujemy tu zapytania do Supabase
+  document.getElementById('pin-setup-hint').style.display = 'block';
+  document.getElementById('pin-setup-hint').textContent = 'Wpisz swój PIN. Jeśli to pierwsze uruchomienie — wpisany PIN stanie się Twoim hasłem.';
 }
 
 // ── STATE ──────────────────────────────────────────────
@@ -876,6 +916,7 @@ function completeTask(id){
 function removeTask(id){S.tasks=S.tasks.filter(function(x){return x.id!==id});save();renderTasks()}
 
 // ── DEADLINES ──────────────────────────────────────────
+var editingDeadlineId=null;
 function addDeadline(){
   var n=document.getElementById('d-name').value.trim();
   var d=document.getElementById('d-date').value;
@@ -897,15 +938,47 @@ function renderDeadlines(){
     else if(days===0){bc='b-rose';bs='Dziś!'}
     else if(days<=7){bc='b-gold';bs='Za '+days+' dni'}
     else{bc='b-gray';bs='Za '+days+' dni'}
-    h+='<div class="dl-item'+(d.done?' dl-done':'')+'"><div style="flex:1">';
+    h+='<div class="dl-item'+(d.done?' dl-done':'')+'" style="cursor:pointer" onclick="openDeadlineModal('+d.id+')"><div style="flex:1">';
     h+='<div class="dl-name">'+(d.done?'✓ ':'')+d.name+'</div>';
     if(d.desc)h+='<div class="dl-sub">'+d.desc+'</div>';
     h+='<div class="dl-sub">'+d.date+'</div></div>';
     h+='<span class="badge '+bc+'">'+bs+'</span>';
-    if(!d.done)h+='<button class="btn btn-sm" onclick="doneDeadline('+d.id+')" style="margin-left:.4rem">✓</button>';
-    h+='<button class="btn btn-sm" onclick="removeDeadline('+d.id+')" style="margin-left:.3rem;color:var(--ink3)">✕</button></div>';
+    if(!d.done)h+='<button class="btn btn-sm" onclick="event.stopPropagation();doneDeadline('+d.id+')" style="margin-left:.4rem">✓</button>';
+    h+='<button class="btn btn-sm" onclick="event.stopPropagation();removeDeadline('+d.id+')" style="margin-left:.3rem;color:var(--ink3)">✕</button></div>';
   });
   el.innerHTML=h;
+}
+function openDeadlineModal(id){
+  var d=S.deadlines.find(function(x){return x.id===id});
+  if(!d)return;
+  editingDeadlineId=id;
+  document.getElementById('edm-name').value=d.name;
+  document.getElementById('edm-date').value=d.date;
+  document.getElementById('edm-desc').value=d.desc||'';
+  document.getElementById('edm-status').value=d.done?'done':'pending';
+  document.getElementById('edit-deadline-modal').style.display='flex';
+}
+function closeDeadlineModal(e){
+  if(e&&e.target!==document.getElementById('edit-deadline-modal'))return;
+  document.getElementById('edit-deadline-modal').style.display='none';
+  editingDeadlineId=null;
+}
+function saveDeadlineModal(){
+  var d=S.deadlines.find(function(x){return x.id===editingDeadlineId});
+  if(!d)return;
+  d.name=document.getElementById('edm-name').value.trim()||d.name;
+  d.date=document.getElementById('edm-date').value||d.date;
+  d.desc=document.getElementById('edm-desc').value.trim();
+  d.done=document.getElementById('edm-status').value==='done';
+  document.getElementById('edit-deadline-modal').style.display='none';
+  editingDeadlineId=null;
+  save();renderDeadlines();renderTasks();renderCalendar();
+}
+function deleteDeadlineFromModal(){
+  S.deadlines=S.deadlines.filter(function(x){return x.id!==editingDeadlineId});
+  document.getElementById('edit-deadline-modal').style.display='none';
+  editingDeadlineId=null;
+  save();renderDeadlines();renderTasks();renderCalendar();
 }
 function doneDeadline(id){var d=S.deadlines.find(function(x){return x.id===id});if(d)d.done=!d.done;save();renderDeadlines()}
 function removeDeadline(id){S.deadlines=S.deadlines.filter(function(x){return x.id!==id});save();renderDeadlines()}
