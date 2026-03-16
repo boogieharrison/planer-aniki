@@ -410,6 +410,7 @@ function initSupabase(){
     console.error('Supabase init error:',e);
     setSyncStatus('error');
     loadLocal();
+    _initialized = true;
     refreshAll();
   }
 }
@@ -425,12 +426,14 @@ async function loadFromSupabase(){
       S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
         calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
     }
+    _initialized = true;
     setSyncStatus('ok');
     refreshAll();
   } catch(e){
     console.error('Supabase load error:',e);
     setSyncStatus('error');
     loadLocal();
+    _initialized = true;
     refreshAll();
   }
 }
