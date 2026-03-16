@@ -441,42 +441,42 @@ async function verifyPin(){
     return;
   }
   var hash = await sha256(pin);
-  APP_PIN_HASH = hash;
 
   try {
+    var client = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+    // Wywołaj funkcję RPC w bazie — ona sprawdzi PIN po stronie serwera
+    var res = await client.rpc('verify_planer_pin', { p_id: ROW_ID, p_pin_hash: hash });
+
+    if(res.error){
+      document.getElementById('pin-error').textContent = 'Błąd serwera: ' + res.error.message;
+      return;
+    }
+
+    var result = res.data; // 'ok', 'wrong_pin', 'created'
+
+    if(result === 'wrong_pin'){
+      document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
+      inp.value = '';
+      inp.focus();
+      return;
+    }
+
+    // PIN OK (result === 'ok' lub 'created') — teraz pobierz dane z headerem
+    APP_PIN_HASH = hash;
     supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
       global: { headers: { 'x-app-pin': hash } }
     });
 
-    // Próba pobrania danych — RLS przepuści tylko z poprawnym PINem
-    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).maybeSingle();
-
-    if(res.data && res.data.data){
-      // PIN poprawny — dane załadowane
-      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
-    } else if(!res.data && !res.error){
-      // Wiersz nie istnieje LUB RLS go ukrył (zły PIN)
-      // Sprawdź: spróbuj insert — jeśli wiersz już jest, to zły PIN
-      var insertRes = await supa.from(TABLE).insert({id: ROW_ID, data: S, pin_hash: hash});
-      if(insertRes.error){
-        // INSERT się nie udał — wiersz istnieje ale PIN nie pasuje
-        document.getElementById('pin-error').textContent = 'Nieprawidłowy PIN.';
-        APP_PIN_HASH = null;
-        supa = null;
-        inp.value = '';
-        inp.focus();
-        return;
+    if(result === 'ok'){
+      var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+      if(dataRes.data && dataRes.data.data){
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
+          calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
       }
-      // INSERT się udał — to było pierwsze uruchomienie, PIN ustawiony
-    } else if(res.error){
-      document.getElementById('pin-error').textContent = 'Błąd połączenia: ' + res.error.message;
-      APP_PIN_HASH = null;
-      supa = null;
-      return;
     }
+    // result === 'created' → pusty stan, dane domyślne
 
-    // PIN OK
     try{localStorage.setItem('planer_pin_hash', hash)}catch(e){}
     showApp();
   } catch(e){
@@ -509,32 +509,34 @@ async function autoLogin(){
   var saved = null;
   try{saved = localStorage.getItem('planer_pin_hash')}catch(e){}
   if(!saved){
-    // Pokaż ekran PINu i sprawdź czy to pierwsze uruchomienie
     document.getElementById('pin-screen').style.display = 'flex';
     checkFirstRun();
     return;
   }
-  APP_PIN_HASH = saved;
+
   try {
-    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
-      global: { headers: { 'x-app-pin': saved } }
-    });
-    var res = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
-    if(res.error){
-      // Zapisany PIN nieaktualny — wymuś ponowne wpisanie
+    var client = supabase.createClient(SUPA_URL, SUPA_KEY);
+    var res = await client.rpc('verify_planer_pin', { p_id: ROW_ID, p_pin_hash: saved });
+
+    if(res.error || res.data === 'wrong_pin'){
       try{localStorage.removeItem('planer_pin_hash')}catch(e){}
       document.getElementById('pin-screen').style.display = 'flex';
       document.getElementById('pin-error').textContent = 'Sesja wygasła — wpisz PIN ponownie.';
       return;
     }
-    if(res.data && res.data.data){
+
+    APP_PIN_HASH = saved;
+    supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
+      global: { headers: { 'x-app-pin': saved } }
+    });
+    var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
+    if(dataRes.data && dataRes.data.data){
       S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],
-        calY:new Date().getFullYear(),calM:new Date().getMonth()}, res.data.data);
+        calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
     }
     showApp();
   } catch(e){
     console.error('Auto-login error:', e);
-    // Offline fallback
     loadLocal();
     _initialized = true;
     document.getElementById('pin-screen').style.display = 'none';
@@ -545,8 +547,6 @@ async function autoLogin(){
 }
 
 async function checkFirstRun(){
-  // Hint jest widoczny — verifyPin sam rozpozna czy to setup czy weryfikacja
-  // Nie potrzebujemy tu zapytania do Supabase
   document.getElementById('pin-setup-hint').style.display = 'block';
   document.getElementById('pin-setup-hint').textContent = 'Wpisz swój PIN. Jeśli to pierwsze uruchomienie — wpisany PIN stanie się Twoim hasłem.';
 }
