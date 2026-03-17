@@ -597,7 +597,8 @@ async function checkFirstRun(){
 // ── STATE ──────────────────────────────────────────────
 var S = {tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
          calY:new Date().getFullYear(),calM:new Date().getMonth()};
-var TODAY = new Date().toISOString().split('T')[0];
+function getToday(){return new Date().toISOString().split('T')[0]}
+var TODAY = getToday();
 
 var _initialized = false;
 
@@ -833,6 +834,7 @@ function onDayDrop(e,ds){
 
 
 function renderTasks(){
+  TODAY=getToday();
   var MNAMES=['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
   var DNAMES=['Nd','Pon','Wt','Śr','Czw','Pt','Sob'];
   var lbl=document.getElementById('tasks-month-label');
