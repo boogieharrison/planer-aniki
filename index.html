@@ -597,7 +597,7 @@ async function checkFirstRun(){
 // ── STATE ──────────────────────────────────────────────
 var S = {tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],
          calY:new Date().getFullYear(),calM:new Date().getMonth()};
-function getToday(){return new Date().toISOString().split('T')[0]}
+function getToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 var TODAY = getToday();
 
 var _initialized = false;
@@ -1506,6 +1506,15 @@ function calClick(ds){
 
 // ── init ───────────────────────────────────────────────
 autoLogin();
+
+// Auto-refresh at midnight (check every 30s)
+setInterval(function(){
+  var now=getToday();
+  if(now!==TODAY){
+    TODAY=now;
+    renderTasks();renderSidebarBacklog();
+  }
+},30000);
 
 </script>
 </body>
