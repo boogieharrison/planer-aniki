@@ -1499,8 +1499,13 @@ function calClick(ds){
   taskViewY=d.getFullYear();taskViewM=d.getMonth();
   showTab('tasks');
   setTimeout(function(){
-    var inp=document.getElementById('qi-'+ds);
-    if(inp){inp.focus();inp.scrollIntoView({behavior:'smooth',block:'center'})}
+    var row=document.getElementById('dr-'+ds);
+    if(row){
+      row.scrollIntoView({behavior:'smooth',block:'center'});
+      row.style.background='#ffd6e3';
+      row.style.transition='background 1s ease';
+      setTimeout(function(){row.style.background='';setTimeout(function(){row.style.transition=''},1000)},1000);
+    }
   },100);
 }
 
