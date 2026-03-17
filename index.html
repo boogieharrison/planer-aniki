@@ -118,8 +118,8 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .day-quick-input:hover{border-color:var(--line);background:var(--accent-bg)}
 .day-quick-input:focus{border-color:var(--ink);background:var(--bg);outline:none}
 .day-quick-input::placeholder{color:var(--ink3)}
-.day-quick-input.qi-paste-ready{border-color:var(--blue);border-style:dashed}
-.day-quick-input.qi-paste-ready::placeholder{color:var(--blue);font-weight:600}
+.day-quick-input.qi-paste-ready{border-color:var(--line2);border-style:dashed}
+.day-quick-input.qi-paste-ready::placeholder{color:var(--ink3)}
 .day-time-inputs{display:none;gap:.4rem;align-items:center;margin-top:.3rem;flex-wrap:wrap}
 .day-time-inputs.show{display:flex}
 .day-time-inputs input{padding:.25rem .4rem;font-size:.8rem}
@@ -786,11 +786,20 @@ function onBacklogEditKey(e,inp){
 
 // ── DRAG & DROP ─────────────────────────────────────────
 var draggedBacklogId=null;
+var draggedTaskId=null;
 function onBacklogDragStart(e,id){
   draggedBacklogId=id;
+  draggedTaskId=null;
   e.dataTransfer.effectAllowed='move';
   e.currentTarget.classList.add('dragging');
   setTimeout(function(){if(e.currentTarget)e.currentTarget.classList.remove('dragging')},0);
+}
+function onTaskDragStart(e,id){
+  draggedTaskId=id;
+  draggedBacklogId=null;
+  e.dataTransfer.effectAllowed='move';
+  e.currentTarget.style.opacity='.4';
+  setTimeout(function(){if(e.currentTarget)e.currentTarget.style.opacity=''},0);
 }
 function onDayDragOver(e,ds){
   e.preventDefault();
@@ -806,13 +815,20 @@ function onDayDrop(e,ds){
   e.preventDefault();
   var col=document.getElementById('dc-'+ds);
   if(col)col.classList.remove('drag-over');
-  if(!draggedBacklogId)return;
-  var item=S.backlog.find(function(x){return x.id===draggedBacklogId});
-  if(!item)return;
-  S.tasks.push({id:Date.now(),name:item.name,date:ds,from:'',note:'',done:false});
-  S.backlog=S.backlog.filter(function(x){return x.id!==draggedBacklogId});
-  draggedBacklogId=null;
-  save();renderTasks();renderSidebarBacklog();
+  if(new Date(ds).getDay()===0)return;
+  if(draggedBacklogId){
+    var item=S.backlog.find(function(x){return x.id===draggedBacklogId});
+    if(!item)return;
+    S.tasks.push({id:Date.now(),name:item.name,date:ds,from:'',done:false});
+    S.backlog=S.backlog.filter(function(x){return x.id!==draggedBacklogId});
+    draggedBacklogId=null;
+    save();renderTasks();renderSidebarBacklog();
+  } else if(draggedTaskId){
+    var t=S.tasks.find(function(x){return x.id===draggedTaskId});
+    if(t){t.date=ds;t.from='';t.overdue=false;}
+    draggedTaskId=null;
+    save();renderTasks();
+  }
 }
 
 
@@ -901,7 +917,7 @@ function renderTasks(){
           itemsHtml+='<button class="task-del" onclick="cancelCut()" style="opacity:1">↩</button>';
           itemsHtml+='</div>';
         } else {
-          itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" ontouchstart="onTaskTouchStart(event,'+t.id+')" ontouchend="onTaskTouchEnd(event)" ontouchmove="onTaskTouchMove(event)">';
+          itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" draggable="true" ondragstart="onTaskDragStart(event,'+t.id+')" ontouchstart="onTaskTouchStart(event,'+t.id+')" ontouchend="onTaskTouchEnd(event)" ontouchmove="onTaskTouchMove(event)">';
           itemsHtml+='<input type="checkbox" onchange="completeTask('+t.id+')">';
           itemsHtml+='<button class="'+timeClass+'" onclick="toggleTimeEdit('+t.id+',this)" id="ttb-'+t.id+'">'+timeDisplay+'</button>';
           itemsHtml+='<input type="text" class="task-name-edit" value="'+t.name.replace(/"/g,'&quot;')+'" data-id="'+t.id+'" onblur="onTaskNameBlur(this)" onkeydown="onTaskNameKey(event,this)">';
@@ -934,7 +950,7 @@ function renderTasks(){
     if(dlChips)rowHtml+=dlChips;
     if(itemsHtml)rowHtml+='<div class="day-tasks-list">'+itemsHtml+'</div>';
     rowHtml+='<div class="day-add-row" id="dar-'+ds+'">';
-    var cutPlaceholder=_cutItem?'przytrzymaj aby wkleić ✂':'+ dodaj zadanie...';
+    var cutPlaceholder=_cutItem?'+ wklej tutaj...':'+ dodaj zadanie...';
     rowHtml+='<input class="day-quick-input'+ (_cutItem?' qi-paste-ready':'')+'" id="qi-'+ds+'" placeholder="'+cutPlaceholder+'" ';
     rowHtml+='onfocus="showDayTimeInputs(\''+ds+'\')" onkeydown="onDayKeydown(event,\''+ds+'\')" oninput="onDayInput(event,\''+ds+'\')" ';
     rowHtml+='ontouchstart="onDayInputTouchStart(event,\''+ds+'\')" ontouchend="onDayInputTouchEnd(event)" ontouchmove="onDayInputTouchMove()">';
