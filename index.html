@@ -38,9 +38,17 @@ header p{color:var(--ink3);font-size:.8rem;letter-spacing:.08em;text-transform:u
 
 /* ── tabs ── */
 nav{display:flex;gap:0;flex-wrap:wrap;margin-bottom:2.5rem;border-bottom:1px solid var(--line)}
-.tab-btn{padding:.7rem 1.5rem;border:none;border-bottom:2px solid transparent;background:transparent;cursor:pointer;font-family:'Syne',sans-serif;font-size:.8rem;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:-1px;transition:color .1s,border-color .1s}
+.tab-btn{padding:.7rem 1.5rem;border:none;border-bottom:2px solid transparent;background:transparent;cursor:pointer;font-family:'Syne',sans-serif;font-size:.8rem;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:-1px;transition:color .1s,border-color .1s;display:flex;align-items:center;gap:.3rem}
 .tab-btn:hover{color:var(--ink)}
 .tab-btn.active{color:var(--ink);border-bottom-color:var(--ink)}
+.tab-ico{display:none}
+.tab-txt{display:inline}
+@media(max-width:600px){
+  .tab-ico{display:inline;font-size:1.4rem}
+  .tab-txt{display:none}
+  .tab-btn{padding:.7rem 0;font-size:1.4rem;flex:1;justify-content:center}
+  nav{justify-content:center}
+}
 
 /* ── sections ── */
 .section{display:none}.section.active{display:block}
@@ -262,10 +270,10 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
   </header>
 
   <nav>
-    <button class="tab-btn active" onclick="showTab('tasks')">Plan</button>
-    <button class="tab-btn" onclick="showTab('books')">Literatura</button>
-    <button class="tab-btn" onclick="showTab('deadlines')">Terminy</button>
-    <button class="tab-btn" onclick="showTab('calendar')">Kalendarz</button>
+    <button class="tab-btn active" onclick="showTab('tasks')"><span class="tab-ico">📋</span><span class="tab-txt">Plan</span></button>
+    <button class="tab-btn" onclick="showTab('books')"><span class="tab-ico">📚</span><span class="tab-txt">Literatura</span></button>
+    <button class="tab-btn" onclick="showTab('deadlines')"><span class="tab-ico">🚩</span><span class="tab-txt">Terminy</span></button>
+    <button class="tab-btn" onclick="showTab('calendar')"><span class="tab-ico">📅</span><span class="tab-txt">Kalendarz</span></button>
   </nav>
 
   <!-- ════ TASKS ════ -->
@@ -729,24 +737,27 @@ function renderBacklog(){} // stub – no longer needed
 function renderSidebarBacklog(){
   var el=document.getElementById('sidebar-backlog-list');
   if(!el)return;
-  if(!S.backlog.length){
-    el.innerHTML=_cutItemId?'':'';
-    return;
-  }
   var h='';
+  // Show "paste here" button when a timeline task is cut
+  if(_cutItem&&_cutItem.type==='task'){
+    h+='<div class="backlog-item bl-cut" style="cursor:pointer;justify-content:center" onclick="pasteToBacklog()">';
+    h+='<span class="bl-cut-label" style="text-align:center">📋 wklej „'+_cutItem.name.slice(0,20)+'" tutaj</span>';
+    h+='</div>';
+  }
   S.backlog.forEach(function(item){
-    var isCut=_cutItemId===item.id;
+    var isCut=_cutItem&&_cutItem.type==='backlog'&&_cutItem.id===item.id;
     h+='<div class="backlog-item'+(isCut?' bl-cut':'')+'" draggable="true" data-id="'+item.id+'" ondragstart="onBacklogDragStart(event,'+item.id+')" ontouchstart="onBlItemTouchStart(event,'+item.id+')" ontouchend="onBlItemTouchEnd(event)" ontouchmove="onBlItemTouchMove(event)">';
     h+='<span class="bl-handle">⠿</span>';
     if(isCut){
-      h+='<span class="bl-cut-label">✂ wycięto — przytrzymaj „+ dodaj" na dniu</span>';
-      h+='<button class="bl-del" onclick="_cutItemId=null;renderSidebarBacklog()">↩</button>';
+      h+='<span class="bl-cut-label">✂ wycięto</span>';
+      h+='<button class="bl-del" onclick="cancelCut()">↩</button>';
     } else {
       h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" data-id="'+item.id+'" onblur="onBacklogBlur(this)" onkeydown="onBacklogEditKey(event,this)">';
       h+='<button class="bl-del" onclick="removeBacklogItem('+item.id+')">✕</button>';
     }
     h+='</div>';
   });
+  if(!S.backlog.length&&!(_cutItem&&_cutItem.type==='task')) h='';
   el.innerHTML=h;
 }
 function onBacklogBlur(inp){
@@ -878,16 +889,25 @@ function renderTasks(){
     merged.forEach(function(m){
       if(m.type==='task'){
         var t=m.data;
+        var isCutTask=_cutItem&&_cutItem.type==='task'&&_cutItem.id===t.id;
         var hasTime=t.from&&t.from!=='';
         var isOverdue=t.overdue&&!hasTime;
         var timeDisplay=isOverdue?'⚠':hasTime?t.from:'–:–';
         var timeClass='task-time-btn'+(hasTime?' has-time':'')+(isOverdue?' overdue':'');
-        itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'">';
-        itemsHtml+='<input type="checkbox" onchange="completeTask('+t.id+')">';
-        itemsHtml+='<button class="'+timeClass+'" onclick="toggleTimeEdit('+t.id+',this)" id="ttb-'+t.id+'">'+timeDisplay+'</button>';
-        itemsHtml+='<input type="text" class="task-name-edit" value="'+t.name.replace(/"/g,'&quot;')+'" data-id="'+t.id+'" onblur="onTaskNameBlur(this)" onkeydown="onTaskNameKey(event,this)">';
-        itemsHtml+='<button class="task-del" onclick="removeTask('+t.id+')">✕</button>';
-        itemsHtml+='</div>';
+        if(isCutTask){
+          itemsHtml+='<div class="task-item bl-cut" id="ti-'+t.id+'" style="border:1px dashed var(--blue);background:var(--blue-bg);opacity:.7">';
+          itemsHtml+='<span style="width:15px;flex-shrink:0"></span>';
+          itemsHtml+='<span class="bl-cut-label">✂ wycięto — przytrzymaj „+ dodaj" na docelowym dniu</span>';
+          itemsHtml+='<button class="task-del" onclick="cancelCut()" style="opacity:1">↩</button>';
+          itemsHtml+='</div>';
+        } else {
+          itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" ontouchstart="onTaskTouchStart(event,'+t.id+')" ontouchend="onTaskTouchEnd(event)" ontouchmove="onTaskTouchMove(event)">';
+          itemsHtml+='<input type="checkbox" onchange="completeTask('+t.id+')">';
+          itemsHtml+='<button class="'+timeClass+'" onclick="toggleTimeEdit('+t.id+',this)" id="ttb-'+t.id+'">'+timeDisplay+'</button>';
+          itemsHtml+='<input type="text" class="task-name-edit" value="'+t.name.replace(/"/g,'&quot;')+'" data-id="'+t.id+'" onblur="onTaskNameBlur(this)" onkeydown="onTaskNameKey(event,this)">';
+          itemsHtml+='<button class="task-del" onclick="removeTask('+t.id+')">✕</button>';
+          itemsHtml+='</div>';
+        }
       } else {
         var e=m.data;
         itemsHtml+='<div class="task-item ics-item" style="pointer-events:none">';
@@ -914,8 +934,8 @@ function renderTasks(){
     if(dlChips)rowHtml+=dlChips;
     if(itemsHtml)rowHtml+='<div class="day-tasks-list">'+itemsHtml+'</div>';
     rowHtml+='<div class="day-add-row" id="dar-'+ds+'">';
-    var cutPlaceholder=_cutItemId?'przytrzymaj aby wkleić ✂':'+ dodaj zadanie...';
-    rowHtml+='<input class="day-quick-input'+ (_cutItemId?' qi-paste-ready':'')+'" id="qi-'+ds+'" placeholder="'+cutPlaceholder+'" ';
+    var cutPlaceholder=_cutItem?'przytrzymaj aby wkleić ✂':'+ dodaj zadanie...';
+    rowHtml+='<input class="day-quick-input'+ (_cutItem?' qi-paste-ready':'')+'" id="qi-'+ds+'" placeholder="'+cutPlaceholder+'" ';
     rowHtml+='onfocus="showDayTimeInputs(\''+ds+'\')" onkeydown="onDayKeydown(event,\''+ds+'\')" oninput="onDayInput(event,\''+ds+'\')" ';
     rowHtml+='ontouchstart="onDayInputTouchStart(event,\''+ds+'\')" ontouchend="onDayInputTouchEnd(event)" ontouchmove="onDayInputTouchMove()">';
     rowHtml+='<button class="day-cancel-btn" id="qx-'+ds+'" style="display:none" onclick="cancelDayInput(\''+ds+'\')">✕</button>';
@@ -1307,29 +1327,50 @@ function toggleTimeEdit(taskId, btn){
   var oldFrom=t.from||'';
 }
 
-// ── CUT & PASTE (mobile: backlog → day) ─────────────
-var _cutItemId=null; // id of cut backlog item
+// ── CUT & PASTE (mobile: backlog/task → day) ────────
+var _cutItem=null; // {type:'backlog'|'task', id:number, name:string}
 var _lpTimer=null;
 
 function cutBacklogItem(id){
-  _cutItemId=id;
-  renderSidebarBacklog();
-  // Auto-clear after 15s if not pasted
-  setTimeout(function(){if(_cutItemId===id){_cutItemId=null;renderSidebarBacklog();}},15000);
+  var item=S.backlog.find(function(x){return x.id===id});
+  if(!item)return;
+  _cutItem={type:'backlog',id:id,name:item.name};
+  renderSidebarBacklog();renderTasks();
+  setTimeout(function(){if(_cutItem&&_cutItem.id===id){_cutItem=null;renderSidebarBacklog();renderTasks();}},15000);
+}
+function cutTaskItem(id){
+  var t=S.tasks.find(function(x){return x.id===id});
+  if(!t)return;
+  _cutItem={type:'task',id:id,name:t.name};
+  renderTasks();renderSidebarBacklog();
+  setTimeout(function(){if(_cutItem&&_cutItem.id===id){_cutItem=null;renderTasks();renderSidebarBacklog();}},15000);
 }
 function cancelCut(){
-  _cutItemId=null;
-  renderSidebarBacklog();
+  _cutItem=null;
+  renderSidebarBacklog();renderTasks();
 }
 function pasteToDay(ds){
-  if(!_cutItemId)return;
-  var item=S.backlog.find(function(x){return x.id===_cutItemId});
-  if(!item)return;
+  if(!_cutItem)return;
   if(new Date(ds).getDay()===0){alert('Niedziele są zablokowane.');return;}
-  S.tasks.push({id:Date.now(),name:item.name,date:ds,from:'',done:false});
-  S.backlog=S.backlog.filter(function(x){return x.id!==_cutItemId});
-  _cutItemId=null;
+  if(_cutItem.type==='backlog'){
+    S.tasks.push({id:Date.now(),name:_cutItem.name,date:ds,from:'',done:false});
+    S.backlog=S.backlog.filter(function(x){return x.id!==_cutItem.id});
+  } else {
+    var t=S.tasks.find(function(x){return x.id===_cutItem.id});
+    if(t){t.date=ds;t.from='';t.overdue=false;}
+  }
+  _cutItem=null;
   var d=new Date(ds);taskViewY=d.getFullYear();taskViewM=d.getMonth();
+  save();renderTasks();renderSidebarBacklog();
+}
+function pasteToBacklog(){
+  if(!_cutItem||_cutItem.type!=='task')return;
+  var t=S.tasks.find(function(x){return x.id===_cutItem.id});
+  if(t){
+    S.backlog.push({id:Date.now(),name:t.name});
+    S.tasks=S.tasks.filter(function(x){return x.id!==_cutItem.id});
+  }
+  _cutItem=null;
   save();renderTasks();renderSidebarBacklog();
 }
 
@@ -1337,9 +1378,7 @@ function pasteToDay(ds){
 function onBlItemTouchStart(e,id){
   var el=e.currentTarget;
   _lpTimer=setTimeout(function(){
-    // Mark as long-press to prevent edit
     el.setAttribute('data-longpress','1');
-    // Blur any focused input inside
     var inp=el.querySelector('.bl-edit');
     if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
     cutBacklogItem(id);
@@ -1358,9 +1397,32 @@ function onBlItemTouchMove(e){
   clearTimeout(_lpTimer);
 }
 
+// Long-press handler for task items on timeline
+function onTaskTouchStart(e,id){
+  var el=e.currentTarget;
+  _lpTimer=setTimeout(function(){
+    el.setAttribute('data-longpress','1');
+    var inp=el.querySelector('.task-name-edit');
+    if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
+    cutTaskItem(id);
+    if(navigator.vibrate)navigator.vibrate(30);
+  },400);
+}
+function onTaskTouchEnd(e){
+  clearTimeout(_lpTimer);
+  var el=e.currentTarget;
+  if(el&&el.getAttribute('data-longpress')==='1'){
+    el.removeAttribute('data-longpress');
+    e.preventDefault();
+  }
+}
+function onTaskTouchMove(e){
+  clearTimeout(_lpTimer);
+}
+
 // Long-press handler for day "dodaj zadanie" inputs
 function onDayInputTouchStart(e,ds){
-  if(!_cutItemId)return; // no cut item — do nothing special
+  if(!_cutItem)return; // no cut item — do nothing special
   _lpTimer=setTimeout(function(){
     e.target.setAttribute('data-longpress','1');
     pasteToDay(ds);
