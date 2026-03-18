@@ -758,12 +758,17 @@ function renderSidebarBacklog(){
   var inputBtn=inputWrap?inputWrap.nextElementSibling:null;
   if(!el)return;
 
-  // During cut mode: dim the input
-  if(_cutItem){
+  // During cut mode: transform input
+  if(_cutItem&&_cutItem.type==='task'){
+    // Cutting from timeline — input becomes paste-to-backlog zone
+    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.onclick=function(){pasteToBacklog()};}
+    if(inputBtn){inputBtn.style.display='none';}
+  } else if(_cutItem){
+    // Cutting from backlog — just dim
     if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';}
     if(inputBtn){inputBtn.style.display='none';}
   } else {
-    if(inputWrap){inputWrap.readOnly=false;inputWrap.style.opacity='';inputWrap.onclick=null;}
+    if(inputWrap){inputWrap.readOnly=false;inputWrap.placeholder='+ nowe zadanie...';inputWrap.style.background='';inputWrap.style.borderColor='';inputWrap.style.borderStyle='';inputWrap.style.color='';inputWrap.style.opacity='';inputWrap.onclick=null;}
     if(inputBtn){inputBtn.style.display='';}
   }
 
