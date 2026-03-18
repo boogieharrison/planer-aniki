@@ -111,6 +111,8 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .day-row{display:flex;gap:0;border-bottom:2px solid var(--line2);min-height:64px}
 .day-row:first-child{border-top:2px solid var(--line2)}
 .day-row.is-today{border-top:3px solid #c0607a;border-bottom:3px solid #c0607a}
+.day-row.has-deadline{background:#ffd6e3}
+.day-row.has-deadline .day-num{color:#c0607a}
 .day-row.is-today .day-num-col{background:transparent}
 .day-row.is-today .day-num{color:#c0607a}
 .day-row.is-today .day-name{color:#d4889a}
@@ -941,7 +943,8 @@ function renderTasks(){
     var isSunday=dow===0;
     var isOff=isDayOff(ds);
     var isBlocked=isSunday||isOff;
-    var cls='day-row'+(isToday?' is-today':isPast?' is-past':'')+(isWeekend?' is-weekend':'')+(isBlocked?' is-sunday':'');
+    var hasDeadline=S.deadlines.some(function(dl){return dl.date===ds&&!dl.done});
+    var cls='day-row'+(isToday?' is-today':isPast?' is-past':'')+(isWeekend?' is-weekend':'')+(isBlocked?' is-sunday':'')+(hasDeadline?' has-deadline':'');
     var dname=DNAMES[dow];
 
     var dayTasks=S.tasks.filter(function(t){return!t.done&&t.date===ds});
@@ -1555,6 +1558,7 @@ function pasteToBacklog(){
 
 // Long-press handler for backlog items
 function onBlItemTouchStart(e,id){
+  document.body.classList.add('cut-mode');
   var el=e.currentTarget;
   _lpTimer=setTimeout(function(){
     el.setAttribute('data-longpress','1');
@@ -1570,14 +1574,18 @@ function onBlItemTouchEnd(e){
   if(el&&el.getAttribute('data-longpress')==='1'){
     el.removeAttribute('data-longpress');
     e.preventDefault();
+  } else {
+    document.body.classList.remove('cut-mode');
   }
 }
 function onBlItemTouchMove(e){
   clearTimeout(_lpTimer);
+  if(!_cutItem)document.body.classList.remove('cut-mode');
 }
 
 // Long-press handler for task items on timeline
 function onTaskTouchStart(e,id){
+  document.body.classList.add('cut-mode');
   var el=e.currentTarget;
   _lpTimer=setTimeout(function(){
     el.setAttribute('data-longpress','1');
@@ -1593,10 +1601,13 @@ function onTaskTouchEnd(e){
   if(el&&el.getAttribute('data-longpress')==='1'){
     el.removeAttribute('data-longpress');
     e.preventDefault();
+  } else {
+    document.body.classList.remove('cut-mode');
   }
 }
 function onTaskTouchMove(e){
   clearTimeout(_lpTimer);
+  if(!_cutItem)document.body.classList.remove('cut-mode');
 }
 
 // Long-press handler for day "dodaj zadanie" inputs
