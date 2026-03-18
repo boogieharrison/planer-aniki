@@ -768,16 +768,15 @@ function renderSidebarBacklog(){
 
   var h='';
   if(_cutItem){
-    // Show cancel + paste-to-backlog
-    h+='<div style="display:flex;gap:.3rem;margin-bottom:.4rem">';
-    h+='<button class="btn btn-sm" onclick="cancelCut()" style="flex-shrink:0;font-size:.65rem;color:var(--ink3)">✕ Anuluj</button>';
+    // Paste-to-backlog button (only for task cuts)
     if(_cutItem.type==='task'){
-      h+='<button class="btn btn-sm" onclick="pasteToBacklog()" style="flex:1;font-size:.65rem;background:var(--blue-bg);color:var(--blue);border-color:var(--blue)">📋 Wklej tutaj</button>';
+      h+='<div class="backlog-item" onclick="pasteToBacklog()" style="cursor:pointer;background:var(--blue-bg);border-color:var(--blue);border-style:dashed;justify-content:center">';
+      h+='<span style="font-size:.75rem;font-weight:600;color:var(--blue)">+ wklej tutaj</span>';
+      h+='</div>';
     }
-    h+='</div>';
-    // Show cut item info
-    h+='<div class="backlog-item bl-cut" style="margin-bottom:.3rem">';
-    h+='<span class="bl-cut-label">✂ '+_cutItem.name+'</span>';
+    // Show cut item with name
+    h+='<div class="backlog-item" style="background:var(--blue-bg);opacity:.6;border-color:var(--blue)">';
+    h+='<span style="font-size:.78rem;font-weight:400;color:var(--blue);flex:1">✂ '+_cutItem.name+'</span>';
     h+='</div>';
   }
   S.backlog.forEach(function(item){
@@ -966,10 +965,10 @@ function renderTasks(){
         var timeDisplay=isOverdue?'⚠':hasTime?t.from:'–:–';
         var timeClass='task-time-btn'+(hasTime?' has-time':'')+(isOverdue?' overdue':'');
         if(isCutTask){
-          itemsHtml+='<div class="task-item bl-cut" id="ti-'+t.id+'" style="border:1px dashed var(--blue);background:var(--blue-bg);opacity:.7">';
+          itemsHtml+='<div class="task-item" id="ti-'+t.id+'" style="background:var(--blue-bg);border-radius:var(--r-sm);opacity:.6">';
           itemsHtml+='<span style="width:15px;flex-shrink:0"></span>';
-          itemsHtml+='<span class="bl-cut-label">✂ wycięto — przytrzymaj „+ dodaj" na docelowym dniu</span>';
-          itemsHtml+='<button class="task-del" onclick="cancelCut()" style="opacity:1">↩</button>';
+          itemsHtml+='<span class="task-time-btn" style="color:var(--blue)">'+(hasTime?t.from:'–:–')+'</span>';
+          itemsHtml+='<span style="font-size:.78rem;font-weight:400;color:var(--blue);flex:1">✂ '+t.name+'</span>';
           itemsHtml+='</div>';
         } else {
           itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" draggable="true" ondragstart="onTaskDragStart(event,'+t.id+')" ontouchstart="onTaskTouchStart(event,'+t.id+')" ontouchend="onTaskTouchEnd(event)" ontouchmove="onTaskTouchMove(event)">';
@@ -1504,6 +1503,22 @@ function cancelCut(){
   _cutItem=null;
   renderSidebarBacklog();renderTasks();
 }
+
+// Cancel cut when clicking outside paste zones
+document.addEventListener('click',function(e){
+  if(!_cutItem)return;
+  // Check if click is on a paste zone or inside one
+  var target=e.target;
+  // paste-to-day buttons have onclick="pasteToDay"
+  // paste-to-backlog has onclick="pasteToBacklog"
+  // cut item itself
+  if(target.closest('[onclick*="pasteToDay"]'))return;
+  if(target.closest('[onclick*="pasteToBacklog"]'))return;
+  if(target.closest('.bl-cut'))return;
+  if(target.closest('[style*="blue-bg"]'))return;
+  // Anything else = cancel
+  cancelCut();
+},true);
 function pasteToDay(ds){
   if(!_cutItem)return;
   if(new Date(ds).getDay()===0||isDayOff(ds)){alert('Ten dzień jest wolny.');return;}
