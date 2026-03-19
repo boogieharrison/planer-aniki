@@ -400,7 +400,8 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
         </div>
         <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
           <div id="ics-status" style="font-size:.7rem;color:var(--ink3);flex:1"></div>
-          <button class="btn btn-sm" onclick="fetchAllIcsFeeds()" style="font-size:.7rem">⟳ Odśwież wszystkie</button>
+          <button class="btn btn-sm" onclick="fetchAllIcsFeeds()" style="font-size:.7rem">⟳ Odśwież</button>
+          <button class="btn btn-sm" onclick="resetIcsCompleted()" style="font-size:.7rem;color:var(--red);border-color:var(--red)">↺ Przywróć odhaczone</button>
         </div>
       </div>
     </details>
@@ -425,7 +426,7 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
       </div>
     </details>
 
-    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.51 · 19.03.2026, 21:30</div>
+    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.52 · 19.03.2026, 15:35</div>
 
   </div>
 </div>
@@ -834,7 +835,9 @@ function renderSidebarBacklog(){
       h+='</div>';
     }
   });
+  var _sy=window.scrollY;
   el.innerHTML=h;
+  window.scrollTo(0,_sy);
 }
 function onBacklogBlur(inp){
   var id=parseInt(inp.getAttribute('data-id'));
@@ -1069,7 +1072,9 @@ function renderTasks(){
     return ds<TODAY;
   }).length;
 
+  var _scrollY=window.scrollY;
   grid.innerHTML=htmlFuture;
+  window.scrollTo(0,_scrollY);
 
 }
 
@@ -1160,6 +1165,11 @@ function undoIcs(){
   S.icsCompleted=(S.icsCompleted||[]).filter(function(k){return k!==_undoIcsKey});
   clearTimeout(_undoIcsTimer);
   _undoIcsKey=null;
+  save();renderTasks();
+}
+function resetIcsCompleted(){
+  if(!confirm('Przywrócić wszystkie odhaczone zadania z kalendarza?'))return;
+  S.icsCompleted=[];
   save();renderTasks();
 }
 function removeTask(id){S.tasks=S.tasks.filter(function(x){return x.id!==id});save();renderTasks()}
@@ -1956,15 +1966,7 @@ setInterval(function(){
   if((S.icsFeeds||[]).length>0) fetchAllIcsFeeds();
 },300000);
 
-// Prevent iOS scroll jump on input focus
-document.addEventListener('focus',function(e){
-  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA'){
-    var sy=window.scrollY;
-    setTimeout(function(){window.scrollTo(0,sy)},50);
-    setTimeout(function(){window.scrollTo(0,sy)},150);
-    setTimeout(function(){window.scrollTo(0,sy)},300);
-  }
-},true);
+// (scroll fix removed — iOS standalone handles focus natively)
 
 </script>
 </body>
