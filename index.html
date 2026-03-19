@@ -39,6 +39,7 @@ body.cut-mode{-webkit-user-select:none;user-select:none}
 .task-item,.backlog-item,.day-quick-input{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .task-name-edit,.bl-edit{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .task-name-edit:focus,.bl-edit:focus{-webkit-user-select:text;user-select:text}
+input[readonly],input:disabled{background:transparent !important;-webkit-appearance:none;-webkit-text-fill-color:inherit;opacity:inherit}
 
 /* ── layout ── */
 .app{max-width:1000px;margin:0 auto;padding:0 2.5rem}
@@ -169,10 +170,9 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .cal-cell.other{opacity:.3}
 .cal-cell.past,.cal-cell.day-off,.cal-cell.sunday{background:repeating-linear-gradient(135deg,#efefef,#efefef 4px,#e5e5e5 4px,#e5e5e5 8px);pointer-events:none}
 .cal-cell.past{opacity:.4}
-.cal-cell.sunday{opacity:.5}
-.cal-cell.sunday .cal-num{color:#bbb}
-.cal-cell.day-off{pointer-events:auto;cursor:pointer;opacity:.6}
-.cal-cell.day-off .cal-num{color:#bbb}
+.cal-cell.sunday,.cal-cell.day-off{opacity:.5}
+.cal-cell.sunday .cal-num,.cal-cell.day-off .cal-num{color:#bbb}
+.cal-cell.day-off{pointer-events:auto;cursor:pointer}
 .cal-num{font-size:.75rem;font-weight:700;color:var(--ink);margin-bottom:.2rem}
 .cal-dot{font-size:.65rem;padding:.05rem .3rem;border-radius:4px;margin-bottom:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .cal-dot.t{background:var(--blue-bg);color:var(--blue)}
@@ -563,6 +563,9 @@ function showApp(){
   _initialized = true;
   setSyncStatus('ok');
   refreshAll();
+  initCalendarHandlers();
+  initBacklogHandlers();
+  initTaskHandlers();
 
   // realtime sync
   supa.channel('planer-changes')
@@ -804,15 +807,15 @@ function renderSidebarBacklog(){
     if(isCut){
       h+='<div class="backlog-item bl-item-cut" draggable="false">';
       h+='<button class="bl-del" style="visibility:hidden" disabled>✕</button>';
-      h+='<input type="text" class="bl-edit" value="✂ '+item.name.replace(/"/g,'&quot;')+'" readonly style="color:var(--blue);opacity:.6">';
+      h+='<input type="text" class="bl-edit" value="✂ '+item.name.replace(/"/g,'&quot;')+'" readonly tabindex="-1" style="color:var(--blue);opacity:.6">';
       h+='</div>';
     } else if(_cutItem){
       h+='<div class="backlog-item bl-item-dimmed" draggable="false">';
       h+='<button class="bl-del" style="visibility:hidden" disabled>✕</button>';
-      h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" readonly style="opacity:.4">';
+      h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" readonly tabindex="-1" style="opacity:.4">';
       h+='</div>';
     } else {
-      h+='<div class="backlog-item" draggable="true" data-id="'+item.id+'" ondragstart="onBacklogDragStart(event,'+item.id+')" ontouchstart="onBlItemTouchStart(event,'+item.id+')" ontouchend="onBlItemTouchEnd(event)" ontouchmove="onBlItemTouchMove(event)">';
+      h+='<div class="backlog-item" draggable="true" data-blid="'+item.id+'" ondragstart="onBacklogDragStart(event,'+item.id+')">';
       h+='<button class="bl-del" onclick="event.stopPropagation();removeBacklogItem('+item.id+')" title="Usuń">✕</button>';
       h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" data-id="'+item.id+'" onblur="onBacklogBlur(this)" onkeydown="onBacklogEditKey(event,this)">';
       h+='</div>';
@@ -992,10 +995,10 @@ function renderTasks(){
           itemsHtml+='<div class="task-item" id="ti-'+t.id+'" style="background:var(--blue-bg);border-radius:var(--r-sm)">';
           itemsHtml+='<input type="checkbox" disabled style="opacity:.3">';
           itemsHtml+='<button class="task-time-btn" style="color:var(--blue);opacity:.5" disabled>'+timeDisplay+'</button>';
-          itemsHtml+='<input type="text" class="task-name-edit" value="✂ '+t.name.replace(/"/g,'&quot;')+'" readonly style="color:var(--blue);opacity:.6">';
+          itemsHtml+='<input type="text" class="task-name-edit" value="✂ '+t.name.replace(/"/g,'&quot;')+'" readonly style="color:var(--blue);opacity:.6;background:transparent;-webkit-appearance:none">';
           itemsHtml+='</div>';
         } else {
-          itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" draggable="true" ondragstart="onTaskDragStart(event,'+t.id+')" ontouchstart="onTaskTouchStart(event,'+t.id+')" ontouchend="onTaskTouchEnd(event)" ontouchmove="onTaskTouchMove(event)">';
+          itemsHtml+='<div class="task-item'+(isOverdue?' task-overdue':'')+'" id="ti-'+t.id+'" draggable="true" data-tid="'+t.id+'" ondragstart="onTaskDragStart(event,'+t.id+')">';
           itemsHtml+='<input type="checkbox" onchange="completeTask('+t.id+')">';
           itemsHtml+='<button class="'+timeClass+'" onclick="toggleTimeEdit('+t.id+',this)" id="ttb-'+t.id+'">'+timeDisplay+'</button>';
           itemsHtml+='<input type="text" class="task-name-edit" value="'+t.name.replace(/"/g,'&quot;')+'" data-id="'+t.id+'" onblur="onTaskNameBlur(this)" onkeydown="onTaskNameKey(event,this)">';
@@ -1058,22 +1061,25 @@ function completeTask(id){
   var t=S.tasks.find(function(x){return x.id===id});
   if(!t)return;
   var row=document.getElementById('ti-'+id);
-  if(row){
-    var nm=row.querySelector('.task-name-edit');
-    if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
-    var cb=row.querySelector('input[type=checkbox]');
-    if(cb)cb.disabled=true;
-  }
+  if(!row)return;
+  // Immediately style as done
+  var nm=row.querySelector('.task-name-edit');
+  var cb=row.querySelector('input[type=checkbox]');
+  var tb=row.querySelector('.task-time-btn');
+  if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
+  if(cb){cb.checked=true;cb.disabled=true;cb.style.opacity='.3';}
+  if(tb){tb.style.opacity='.3';tb.disabled=true;}
+  // Add Cofnij button after short delay
   setTimeout(function(){
     t.done=true;
     _undoTask={id:t.id,task:JSON.parse(JSON.stringify(t))};
-    // Replace the row content inline with undo row
-    if(row){
-      row.innerHTML='<input type="checkbox" checked disabled style="opacity:.3">'
-        +'<span class="task-time-btn" style="opacity:.3">'+(t.from||'–:–')+'</span>'
-        +'<span style="font-size:.78rem;font-weight:400;color:var(--ink3);flex:1;text-decoration:line-through">'+t.name+'</span>'
-        +'<button class="btn btn-sm" onclick="undoComplete()" style="font-size:.65rem;flex-shrink:0">Cofnij</button>';
-    }
+    // Append undo button without changing existing structure
+    var btn=document.createElement('button');
+    btn.className='btn btn-sm';
+    btn.textContent='Cofnij';
+    btn.style.cssText='font-size:.65rem;flex-shrink:0;margin-left:auto';
+    btn.onclick=function(){undoComplete()};
+    row.appendChild(btn);
     save();
     clearTimeout(_undoTimer);
     _undoTimer=setTimeout(function(){
@@ -1572,51 +1578,87 @@ function pasteToBacklog(){
   window.scrollTo(0,scrollY);
 }
 
-// Long-press handler for backlog items
-function onBlItemTouchStart(e,id){
-  var el=e.currentTarget;
-  _lpTimer=setTimeout(function(){
-    el.setAttribute('data-longpress','1');
-    var inp=el.querySelector('.bl-edit');
-    if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
-    cutBacklogItem(id);
-    if(navigator.vibrate)navigator.vibrate(30);
-  },400);
-}
-function onBlItemTouchEnd(e){
-  clearTimeout(_lpTimer);
-  var el=e.currentTarget;
-  if(el&&el.getAttribute('data-longpress')==='1'){
-    el.removeAttribute('data-longpress');
-    e.preventDefault();
-  }
-}
-function onBlItemTouchMove(e){
-  clearTimeout(_lpTimer);
-}
+// Long-press handler for backlog items (delegated)
+function initBacklogHandlers(){
+  var list=document.getElementById('sidebar-backlog-list');
+  if(!list||list._blInit)return;
+  list._blInit=true;
+  var timer=null;
+  var fired=false;
+  var startTime=0;
 
-// Long-press handler for task items on timeline
-function onTaskTouchStart(e,id){
-  var el=e.currentTarget;
-  _lpTimer=setTimeout(function(){
-    el.setAttribute('data-longpress','1');
-    var inp=el.querySelector('.task-name-edit');
-    if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
-    cutTaskItem(id);
-    if(navigator.vibrate)navigator.vibrate(30);
-  },400);
+  list.addEventListener('touchstart',function(e){
+    var item=e.target.closest('.backlog-item[data-blid]');
+    if(!item)return;
+    var id=parseInt(item.getAttribute('data-blid'));
+    fired=false;
+    startTime=Date.now();
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      fired=true;
+      var inp=item.querySelector('.bl-edit');
+      if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
+      cutBacklogItem(id);
+      if(navigator.vibrate)navigator.vibrate(30);
+    },400);
+  });
+
+  list.addEventListener('touchmove',function(){
+    clearTimeout(timer);
+  });
+
+  list.addEventListener('touchend',function(e){
+    clearTimeout(timer);
+    if(fired){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setTimeout(function(){fired=false},300);
+    }
+  });
 }
-function onTaskTouchEnd(e){
-  clearTimeout(_lpTimer);
-  var el=e.currentTarget;
-  if(el&&el.getAttribute('data-longpress')==='1'){
-    el.removeAttribute('data-longpress');
-    e.preventDefault();
-  }
+function onBlItemTouchStart(){}
+function onBlItemTouchEnd(){}
+function onBlItemTouchMove(){}
+
+// Long-press handler for task items on timeline (delegated)
+function initTaskHandlers(){
+  var grid=document.getElementById('tasks-month-grid');
+  if(!grid||grid._taskInit)return;
+  grid._taskInit=true;
+  var timer=null;
+  var fired=false;
+
+  grid.addEventListener('touchstart',function(e){
+    var item=e.target.closest('.task-item[data-tid]');
+    if(!item)return;
+    var id=parseInt(item.getAttribute('data-tid'));
+    fired=false;
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      fired=true;
+      var inp=item.querySelector('.task-name-edit');
+      if(inp){inp.blur();inp.readOnly=true;setTimeout(function(){inp.readOnly=false},100);}
+      cutTaskItem(id);
+      if(navigator.vibrate)navigator.vibrate(30);
+    },400);
+  });
+
+  grid.addEventListener('touchmove',function(){
+    clearTimeout(timer);
+  });
+
+  grid.addEventListener('touchend',function(e){
+    clearTimeout(timer);
+    if(fired){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setTimeout(function(){fired=false},300);
+    }
+  });
 }
-function onTaskTouchMove(e){
-  clearTimeout(_lpTimer);
-}
+function onTaskTouchStart(){}
+function onTaskTouchEnd(){}
+function onTaskTouchMove(){}
 
 // Long-press handler for day "dodaj zadanie" inputs
 function onDayInputTouchStart(e,ds){
@@ -1653,27 +1695,67 @@ function toggleDayOff(ds){
 }
 var _calLpTimer=null;
 var _calLpFired=false;
-function onCalCellTouchStart(e,ds){
-  _calLpFired=false;
-  _calLpTimer=setTimeout(function(){
-    _calLpFired=true;
-    toggleDayOff(ds);
-    if(navigator.vibrate)navigator.vibrate(30);
-  },500);
-}
-function onCalCellTouchEnd(e){
-  clearTimeout(_calLpTimer);
-  if(_calLpFired){
-    e.preventDefault();
-    e.stopPropagation();
-    _calLpFired=false;
+var _calTouchStartTime=0;
+
+function initCalendarHandlers(){
+  var body=document.getElementById('cal-body');
+  if(!body||body._calInit)return;
+  body._calInit=true;
+
+  function getCellDs(e){
+    var cell=e.target.closest('.cal-cell[data-ds]');
+    return cell?cell.getAttribute('data-ds'):null;
   }
-}
-function onCalCellTouchMove(){clearTimeout(_calLpTimer)}
-function calClickGuard(ds){
-  // Don't fire calClick if long-press just happened
-  if(_calLpFired){_calLpFired=false;return;}
-  calClick(ds);
+
+  body.addEventListener('touchstart',function(e){
+    var ds=getCellDs(e);
+    if(!ds)return;
+    _calLpFired=false;
+    _calTouchStartTime=Date.now();
+    clearTimeout(_calLpTimer);
+    _calLpTimer=setTimeout(function(){
+      _calLpFired=true;
+      toggleDayOff(ds);
+      if(navigator.vibrate)navigator.vibrate(30);
+    },500);
+  });
+
+  body.addEventListener('touchmove',function(){
+    clearTimeout(_calLpTimer);
+  });
+
+  body.addEventListener('touchend',function(e){
+    clearTimeout(_calLpTimer);
+    if(_calLpFired){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      // Reset after a short delay to block the synthetic click
+      setTimeout(function(){_calLpFired=false},300);
+    }
+  });
+
+  body.addEventListener('click',function(e){
+    // Block click if long-press just fired or touch lasted > 400ms
+    if(_calLpFired){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    var elapsed=Date.now()-_calTouchStartTime;
+    if(elapsed>400){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    var ds=getCellDs(e);
+    if(!ds)return;
+    var cell=e.target.closest('.cal-cell');
+    if(cell&&cell.classList.contains('day-off')){
+      toggleDayOff(ds);
+    } else {
+      calClick(ds);
+    }
+  });
 }
 
 function renderCalendar(){
@@ -1703,16 +1785,14 @@ function renderCalendar(){
     if(isPast)return'<div class="cal-cell past"><div class="cal-num">'+c.day+'</div></div>';
     if(isSun)return'<div class="cal-cell sunday"><div class="cal-num">'+c.day+'</div></div>';
 
-    var touch=' ontouchstart="onCalCellTouchStart(event,\''+ds+'\')" ontouchend="onCalCellTouchEnd(event)" ontouchmove="onCalCellTouchMove()"';
-
-    if(isOff)return'<div class="cal-cell day-off"'+touch+' onclick="toggleDayOff(\''+ds+'\')"><div class="cal-num">'+c.day+'</div><div style="font-size:.5rem;color:#bbb;text-align:center">wolne</div></div>';
+    if(isOff)return'<div class="cal-cell day-off" data-ds="'+ds+'"><div class="cal-num">'+c.day+'</div></div>';
 
     var dots='';
     S.tasks.filter(function(t){return!t.done&&t.date===ds}).slice(0,2).forEach(function(t){dots+='<div class="cal-dot t">'+(t.from?t.from+' ':'')+t.name.slice(0,10)+'</div>'});
     S.deadlines.filter(function(d){return d.date===ds}).slice(0,1).forEach(function(d){dots+='<div class="cal-dot d">⚑ '+d.name.slice(0,10)+'</div>'});
     getIcsEventsForDate(ds).slice(0,2).forEach(function(e){dots+='<div class="cal-dot" style="background:'+e.color+'15;color:'+e.color+'">'+(e.timeFrom?e.timeFrom+' ':'')+e.summary.slice(0,10)+'</div>'});
 
-    return'<div class="cal-cell'+(isT?' today':'')+(hasDeadline?' has-deadline':'')+'"'+touch+' onclick="calClickGuard(\''+ds+'\')"><div class="cal-num">'+c.day+'</div>'+dots+'</div>';
+    return'<div class="cal-cell'+(isT?' today':'')+(hasDeadline?' has-deadline':'')+'" data-ds="'+ds+'"><div class="cal-num">'+c.day+'</div>'+dots+'</div>';
   }).join('');
 }
 
