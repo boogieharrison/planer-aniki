@@ -428,7 +428,7 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
       </div>
     </details>
 
-    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.54 · 19.03.2026, 23:24</div>
+    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.53 · 19.03.2026, 22:30</div>
 
   </div>
 </div>
@@ -652,39 +652,31 @@ var _initialized = false;
 var _undoStack = [];
 var _redoStack = [];
 var _maxUndo = 30;
-var _skipHistory = false;
-var _lastSnapshot = null;
+var _isUndoing = false;
 
-function pushHistory(){
-  if(_skipHistory||!_initialized)return;
-  if(_lastSnapshot){
-    _undoStack.push(_lastSnapshot);
-    if(_undoStack.length>_maxUndo)_undoStack.shift();
-    _redoStack=[];
-    updateUndoButtons();
-  }
-  _lastSnapshot=JSON.stringify(S);
+function pushUndo(){
+  if(_isUndoing||!_initialized)return;
+  _undoStack.push(JSON.stringify(S));
+  if(_undoStack.length>_maxUndo)_undoStack.shift();
+  _redoStack=[];
+  updateUndoButtons();
 }
 function undo(){
   if(!_undoStack.length)return;
   _redoStack.push(JSON.stringify(S));
-  var prev=_undoStack.pop();
-  _skipHistory=true;
-  S=JSON.parse(prev);
-  _lastSnapshot=JSON.stringify(S);
+  S=JSON.parse(_undoStack.pop());
+  _isUndoing=true;
   save();refreshAll();
-  _skipHistory=false;
+  _isUndoing=false;
   updateUndoButtons();
 }
 function redo(){
   if(!_redoStack.length)return;
   _undoStack.push(JSON.stringify(S));
-  var next=_redoStack.pop();
-  _skipHistory=true;
-  S=JSON.parse(next);
-  _lastSnapshot=JSON.stringify(S);
+  S=JSON.parse(_redoStack.pop());
+  _isUndoing=true;
   save();refreshAll();
-  _skipHistory=false;
+  _isUndoing=false;
   updateUndoButtons();
 }
 function updateUndoButtons(){
@@ -696,7 +688,6 @@ function updateUndoButtons(){
 
 function save(){
   if(!_initialized) return;
-  pushHistory();
   try{localStorage.setItem('zspl2',JSON.stringify(S))}catch(e){}
   if(!supa){return;}
   clearTimeout(_saveTimer);
@@ -777,6 +768,7 @@ function isDayOff(ds){
 }
 
 function addTaskForDay(ds){
+  pushUndo();
   var inp=document.getElementById('qi-'+ds);
   var name=inp?inp.value.trim():'';
   if(!name)return;
@@ -824,6 +816,7 @@ function cancelDayInput(ds){
 
 // ── ZADANIA (backlog) ──────────────────────────────────
 function addSidebarTask(){
+  pushUndo();
   var inp=document.getElementById('sidebar-bl-input');
   var name=inp?inp.value.trim():'';
   if(!name)return;
@@ -831,7 +824,7 @@ function addSidebarTask(){
   inp.value='';
   save();renderSidebarBacklog();
 }
-function removeBacklogItem(id){
+function removeBacklogItem(id){pushUndo();
   S.backlog=S.backlog.filter(function(x){return x.id!==id});
   save();renderSidebarBacklog();
 }
@@ -853,7 +846,7 @@ function renderSidebarBacklog(){
 
   // Transform input for paste-to-backlog (no DOM change, just attrs)
   if(_cutItem&&_cutItem.type==='task'){
-    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.onclick=function(){pasteToBacklog()};}
+    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';}
   } else if(_cutItem){
     if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';}
   } else {
@@ -1098,7 +1091,7 @@ function renderTasks(){
     if(itemsHtml)rowHtml+='<div class="day-tasks-list">'+itemsHtml+'</div>';
     rowHtml+='<div class="day-add-row" id="dar-'+ds+'">';
     if(_cutItem){
-      rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ wklej tutaj" readonly onclick="pasteToDay(\''+ds+'\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
+      rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ wklej tutaj" readonly data-paste-ds="'+ds+'" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
     } else {
       rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ dodaj zadanie..." onfocus="showDayTimeInputs(\''+ds+'\')" onkeydown="onDayKeydown(event,\''+ds+'\')" oninput="onDayInput(event,\''+ds+'\')">';
     }
@@ -1125,6 +1118,7 @@ function renderTasks(){
 }
 
 function completeTask(id){
+  pushUndo();
   var t=S.tasks.find(function(x){return x.id===id});
   if(!t)return;
   var row=document.getElementById('ti-'+id);
@@ -1145,6 +1139,7 @@ function completeTask(id){
 var _undoIcsKey=null;
 var _undoIcsTimer=null;
 function completeIcs(key,rowId){
+  pushUndo();
   if(!S.icsCompleted)S.icsCompleted=[];
   var row=document.getElementById(rowId);
   if(row){
@@ -1189,8 +1184,9 @@ function resetIcsCompleted(){
   S.icsCompleted=[];
   save();renderTasks();
 }
-function removeTask(id){S.tasks=S.tasks.filter(function(x){return x.id!==id});save();renderTasks()}
+function removeTask(id){pushUndo();S.tasks=S.tasks.filter(function(x){return x.id!==id});save();renderTasks()}
 function onTaskNameBlur(inp){
+  pushUndo();
   var id=parseInt(inp.getAttribute('data-id'));
   var val=inp.value.trim();
   if(!val){
@@ -1216,6 +1212,7 @@ function onTaskNameKey(e,inp){
 // ── DEADLINES ──────────────────────────────────────────
 var editingDeadlineId=null;
 function addDeadline(){
+  pushUndo();
   var n=document.getElementById('d-name').value.trim();
   var d=document.getElementById('d-date').value;
   if(!n||!d)return alert('Podaj nazwę i termin.');
@@ -1667,19 +1664,30 @@ function cancelCut(){
   window.scrollTo(0,scrollY);
 }
 
-// Cancel cut when clicking outside paste zones
+// Global click handler — paste zones or cancel cut
 document.addEventListener('click',function(e){
   if(!_cutItem)return;
   var target=e.target;
-  // Don't cancel if clicking paste zones or cut items
-  if(target.closest('[onclick*="pasteTo"]'))return;
-  if(target.id==='sidebar-bl-input'&&target.readOnly)return;
+
+  // Check if clicked a paste-to-day zone
+  var pasteInput=target.closest('.day-quick-input[data-paste-ds]');
+  if(pasteInput){
+    pasteToDay(pasteInput.getAttribute('data-paste-ds'));
+    return;
+  }
+  // Check if clicked backlog paste zone
+  if(target.id==='sidebar-bl-input'&&target.readOnly){
+    pasteToBacklog();
+    return;
+  }
+  // Don't cancel if clicking on cut item itself
   if(target.closest('.task-item')&&target.closest('.task-item').style.background)return;
-  if(target.closest('.backlog-item')&&target.closest('.backlog-item').style.borderColor)return;
+  if(target.closest('.backlog-item.bl-item-cut'))return;
   // Anything else = cancel
   cancelCut();
 },true);
 function pasteToDay(ds){
+  pushUndo();
   if(!_cutItem)return;
   if(new Date(ds).getDay()===0||isDayOff(ds)){alert('Ten dzień jest wolny.');return;}
   var scrollY=window.scrollY;
@@ -1697,6 +1705,7 @@ function pasteToDay(ds){
   window.scrollTo(0,scrollY);
 }
 function pasteToBacklog(){
+  pushUndo();
   if(!_cutItem||_cutItem.type!=='task')return;
   var scrollY=window.scrollY;
   var t=S.tasks.find(function(x){return x.id===_cutItem.id});
@@ -1819,6 +1828,7 @@ var DAYS=['Pon','Wt','Śr','Czw','Pt','Sob','Nd'];
 var MONTHS=['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 function changeMonth(dir){S.calM+=dir;if(S.calM>11){S.calM=0;S.calY++}if(S.calM<0){S.calM=11;S.calY--}save();renderCalendar()}
 function toggleDayOff(ds){
+  pushUndo();
   if(!S.daysOff)S.daysOff=[];
   var idx=S.daysOff.indexOf(ds);
   if(idx===-1)S.daysOff.push(ds);
