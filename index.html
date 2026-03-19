@@ -37,7 +37,8 @@ html{background:var(--bg);color:var(--ink);font-family:'Syne',sans-serif;font-si
 body{min-height:100vh;padding-bottom:4rem;-webkit-touch-callout:none}
 body.cut-mode{-webkit-user-select:none;user-select:none}
 .task-item,.backlog-item,.day-quick-input{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.task-name-edit,.bl-edit{-webkit-user-select:text;user-select:text}
+.task-name-edit,.bl-edit{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.task-name-edit:focus,.bl-edit:focus{-webkit-user-select:text;user-select:text}
 
 /* ── layout ── */
 .app{max-width:1000px;margin:0 auto;padding:0 2.5rem}
