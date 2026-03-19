@@ -95,7 +95,7 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 /* ── task rows ── */
 .task-item{display:flex;align-items:center;gap:.4rem;padding:.25rem .1rem;margin-bottom:.05rem;transition:opacity .3s;line-height:1.2;border-radius:var(--r-sm)}
 .task-item:hover{background:var(--accent-bg)}
-.task-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--ink);margin-right:.3rem}
+.task-item input[type=checkbox]{width:20px;height:20px;cursor:pointer;flex-shrink:0;accent-color:var(--ink);margin-right:.3rem;margin-left:-.15rem;padding:0}
 .task-time-btn{background:none;border:none;padding:.1rem 0;font-family:'Syne',sans-serif;font-size:.72rem;font-weight:600;color:var(--ink);cursor:pointer;flex-shrink:0;width:32px;text-align:center}
 .task-time-btn.has-time{color:var(--ink)}
 .task-time-btn.overdue{color:var(--red);font-size:.8rem}
@@ -1770,6 +1770,9 @@ function initTaskHandlers(){
   var fired=false;
 
   grid.addEventListener('touchstart',function(e){
+    // Don't start cut from checkbox or time button
+    if(e.target.closest('input[type=checkbox]'))return;
+    if(e.target.closest('.task-time-btn'))return;
     var item=e.target.closest('.task-item[data-tid]');
     if(!item)return;
     var id=parseInt(item.getAttribute('data-tid'));
