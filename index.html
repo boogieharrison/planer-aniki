@@ -426,7 +426,7 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
       </div>
     </details>
 
-    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.53 · 19.03.2026, 22:30</div>
+    <div style="text-align:center;margin-top:1.5rem;font-size:.65rem;color:var(--ink3);letter-spacing:.04em">Planer Aniki v0.52 · 19.03.2026, 15:35</div>
 
   </div>
 </div>
@@ -1081,45 +1081,37 @@ function renderTasks(){
 var _undoTask=null;
 var _undoTimer=null;
 function completeTask(id){
-  // If there's a previous undo pending, finalize it immediately
-  if(_undoTask){
-    S.tasks=S.tasks.filter(function(x){return x.id!==_undoTask.id});
-    clearTimeout(_undoTimer);
-    _undoTask=null;
-  }
-
   var t=S.tasks.find(function(x){return x.id===id});
   if(!t)return;
   var row=document.getElementById('ti-'+id);
   if(!row)return;
-
-  // Immediately mark as done and show Cofnij
-  t.done=true;
-  _undoTask={id:t.id,task:JSON.parse(JSON.stringify(t))};
-  _undoTask.task.done=false;
-
+  // Immediately style as done
   var nm=row.querySelector('.task-name-edit');
   var cb=row.querySelector('input[type=checkbox]');
   var tb=row.querySelector('.task-time-btn');
   if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
   if(cb){cb.checked=true;cb.disabled=true;cb.style.opacity='.3';}
   if(tb){tb.style.opacity='.3';tb.disabled=true;}
-
-  var btn=document.createElement('button');
-  btn.className='btn btn-sm';
-  btn.textContent='Cofnij';
-  btn.style.cssText='font-size:.65rem;flex-shrink:0;margin-left:auto';
-  btn.onclick=function(){undoComplete()};
-  row.appendChild(btn);
-
-  save();
-  _undoTimer=setTimeout(function(){
-    if(_undoTask&&_undoTask.id===id){
-      S.tasks=S.tasks.filter(function(x){return x.id!==id});
-      _undoTask=null;
-      save();renderTasks();
-    }
-  },4000);
+  // Add Cofnij button after short delay
+  setTimeout(function(){
+    t.done=true;
+    _undoTask={id:t.id,task:JSON.parse(JSON.stringify(t))};
+    // Append undo button without changing existing structure
+    var btn=document.createElement('button');
+    btn.className='btn btn-sm';
+    btn.textContent='Cofnij';
+    btn.style.cssText='font-size:.65rem;flex-shrink:0;margin-left:auto';
+    btn.onclick=function(){undoComplete()};
+    row.appendChild(btn);
+    save();
+    clearTimeout(_undoTimer);
+    _undoTimer=setTimeout(function(){
+      if(_undoTask&&_undoTask.id===id){
+        _undoTask=null;
+        renderTasks();
+      }
+    },5000);
+  },500);
 }
 function undoComplete(){
   if(!_undoTask)return;
