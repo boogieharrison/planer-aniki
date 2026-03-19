@@ -66,6 +66,23 @@
                 -webkit-user-select: none;
                 user-select: none;
             }
+            body.cut-mode .task-item input[type="checkbox"],
+            body.cut-mode .task-item .task-time-btn,
+            body.cut-mode .task-item .task-name-edit,
+            body.cut-mode .task-item .task-del,
+            body.cut-mode .day-quick-input:not(.paste-zone),
+            body.cut-mode .day-time-inputs,
+            body.cut-mode .day-cancel-btn,
+            body.cut-mode .day-add-confirm,
+            body.cut-mode .tab-btn,
+            body.cut-mode .tasks-month-nav button,
+            body.cut-mode .bl-edit,
+            body.cut-mode .bl-del,
+            body.cut-mode #sidebar-bl-input:not(.paste-zone),
+            body.cut-mode nav button {
+                pointer-events: none !important;
+                opacity: 0.3 !important;
+            }
             .task-item,
             .backlog-item,
             .day-quick-input {
@@ -1731,7 +1748,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.60 · 20.03.2026, 00:48
+                    Planer Aniki v0.61 · 20.03.2026, 00:57
                 </div>
             </div>
         </div>
@@ -2135,11 +2152,13 @@
                 _saveTimer = setTimeout(async function () {
                     setSyncStatus("saving");
                     try {
-                        await supa.from(TABLE).upsert({
-                            id: ROW_ID,
-                            data: JSON.parse(JSON.stringify(S)),
-                            pin_hash: APP_PIN_HASH,
-                        });
+                        await supa
+                            .from(TABLE)
+                            .upsert({
+                                id: ROW_ID,
+                                data: JSON.parse(JSON.stringify(S)),
+                                pin_hash: APP_PIN_HASH,
+                            });
                         setSyncStatus("ok");
                     } catch (e) {
                         console.error("Supabase save error:", e);
@@ -3865,11 +3884,6 @@
                 renderSidebarBacklog();
                 renderTasks();
                 window.scrollTo(0, scrollY);
-                setTimeout(function () {
-                    if (_cutItem && _cutItem.id === id) {
-                        cancelCut();
-                    }
-                }, 15000);
             }
             function cutTaskItem(id) {
                 var t = S.tasks.find(function (x) {
@@ -3882,11 +3896,6 @@
                 renderTasks();
                 renderSidebarBacklog();
                 window.scrollTo(0, scrollY);
-                setTimeout(function () {
-                    if (_cutItem && _cutItem.id === id) {
-                        cancelCut();
-                    }
-                }, 15000);
             }
             function cancelCut() {
                 _cutItem = null;
