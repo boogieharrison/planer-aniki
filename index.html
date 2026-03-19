@@ -285,6 +285,8 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 <div class="app" id="main-app" style="display:none">
   <header>
     <h1 style="cursor:pointer" onclick="showTab('tasks')">Planer <em>Aniki</em></h1>
+    <button id="undo-btn" onclick="undo()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--line2);padding:.2rem;line-height:1;transition:color .1s" disabled title="Cofnij">←</button>
+    <button id="redo-btn" onclick="redo()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--line2);padding:.2rem;line-height:1;transition:color .1s" disabled title="Przywróć">→</button>
     <span id="sync-status" style="margin-left:auto;font-size:.7rem;font-weight:600;letter-spacing:.06em;color:var(--ink3)">⟳ Łączenie...</span>
     <button onclick="showTab('settings')" style="background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--ink3);padding:.2rem;line-height:1;transition:color .1s" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--ink3)'" title="Ustawienia">⚙</button>
   </header>
@@ -647,10 +649,54 @@ function getToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMont
 var TODAY = getToday();
 
 var _initialized = false;
+var _undoStack = [];
+var _redoStack = [];
+var _maxUndo = 30;
+var _skipHistory = false;
+var _lastSnapshot = null;
+
+function pushHistory(){
+  if(_skipHistory||!_initialized)return;
+  if(_lastSnapshot){
+    _undoStack.push(_lastSnapshot);
+    if(_undoStack.length>_maxUndo)_undoStack.shift();
+    _redoStack=[];
+    updateUndoButtons();
+  }
+  _lastSnapshot=JSON.stringify(S);
+}
+function undo(){
+  if(!_undoStack.length)return;
+  _redoStack.push(JSON.stringify(S));
+  var prev=_undoStack.pop();
+  _skipHistory=true;
+  S=JSON.parse(prev);
+  _lastSnapshot=JSON.stringify(S);
+  save();refreshAll();
+  _skipHistory=false;
+  updateUndoButtons();
+}
+function redo(){
+  if(!_redoStack.length)return;
+  _undoStack.push(JSON.stringify(S));
+  var next=_redoStack.pop();
+  _skipHistory=true;
+  S=JSON.parse(next);
+  _lastSnapshot=JSON.stringify(S);
+  save();refreshAll();
+  _skipHistory=false;
+  updateUndoButtons();
+}
+function updateUndoButtons(){
+  var ub=document.getElementById('undo-btn');
+  var rb=document.getElementById('redo-btn');
+  if(ub){ub.disabled=!_undoStack.length;ub.style.color=_undoStack.length?'var(--ink3)':'var(--line2)';}
+  if(rb){rb.disabled=!_redoStack.length;rb.style.color=_redoStack.length?'var(--ink3)':'var(--line2)';}
+}
 
 function save(){
-  // nie zapisuj zanim dane nie zostały załadowane z Supabase
   if(!_initialized) return;
+  pushHistory();
   try{localStorage.setItem('zspl2',JSON.stringify(S))}catch(e){}
   if(!supa){return;}
   clearTimeout(_saveTimer);
@@ -1078,60 +1124,23 @@ function renderTasks(){
 
 }
 
-var _undoTask=null;
-var _undoTimer=null;
 function completeTask(id){
-  // If there's a previous undo pending, finalize it immediately
-  if(_undoTask){
-    S.tasks=S.tasks.filter(function(x){return x.id!==_undoTask.id});
-    clearTimeout(_undoTimer);
-    _undoTask=null;
-  }
-
   var t=S.tasks.find(function(x){return x.id===id});
   if(!t)return;
   var row=document.getElementById('ti-'+id);
-  if(!row)return;
-
-  // Immediately mark as done and show Cofnij
-  t.done=true;
-  _undoTask={id:t.id,task:JSON.parse(JSON.stringify(t))};
-  _undoTask.task.done=false;
-
-  var nm=row.querySelector('.task-name-edit');
-  var cb=row.querySelector('input[type=checkbox]');
-  var tb=row.querySelector('.task-time-btn');
-  if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
-  if(cb){cb.checked=true;cb.disabled=true;cb.style.opacity='.3';}
-  if(tb){tb.style.opacity='.3';tb.disabled=true;}
-
-  var btn=document.createElement('button');
-  btn.className='btn btn-sm';
-  btn.textContent='Cofnij';
-  btn.style.cssText='font-size:.65rem;flex-shrink:0;margin-left:auto';
-  btn.onclick=function(){undoComplete()};
-  row.appendChild(btn);
-
-  save();
-  _undoTimer=setTimeout(function(){
-    if(_undoTask&&_undoTask.id===id){
-      S.tasks=S.tasks.filter(function(x){return x.id!==id});
-      _undoTask=null;
-      save();renderTasks();
-    }
-  },4000);
-}
-function undoComplete(){
-  if(!_undoTask)return;
-  var t=S.tasks.find(function(x){return x.id===_undoTask.id});
-  if(t){
-    t.done=false;
-    t.from=_undoTask.task.from||'';
-    t.overdue=_undoTask.task.overdue||false;
+  if(row){
+    var nm=row.querySelector('.task-name-edit');
+    var cb=row.querySelector('input[type=checkbox]');
+    var tb=row.querySelector('.task-time-btn');
+    if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
+    if(cb){cb.checked=true;cb.disabled=true;cb.style.opacity='.3';}
+    if(tb){tb.style.opacity='.3';}
   }
-  clearTimeout(_undoTimer);
-  _undoTask=null;
-  save();renderTasks();
+  setTimeout(function(){
+    t.done=true;
+    S.tasks=S.tasks.filter(function(x){return x.id!==id});
+    save();renderTasks();
+  },600);
 }
 var _undoIcsKey=null;
 var _undoIcsTimer=null;
