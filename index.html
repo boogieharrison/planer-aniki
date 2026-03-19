@@ -1731,7 +1731,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.59 · 20.03.2026, 00:30
+                    Planer Aniki v0.60 · 20.03.2026, 00:48
                 </div>
             </div>
         </div>
@@ -3897,31 +3897,64 @@
                 window.scrollTo(0, scrollY);
             }
 
-            // Cancel cut when clicking outside paste zones
+            // Detect if tap/click target is a paste zone or cut-mode interactive element
+            function _isPasteOrCutZone(target) {
+                if (target.closest(".paste-zone")) return true;
+                if (target.closest("[data-paste-zone]")) return true;
+                if (target.id === "sidebar-bl-input" && target.readOnly)
+                    return true;
+                if (
+                    target.closest(".task-item") &&
+                    target.closest(".task-item").style.background
+                )
+                    return true;
+                if (
+                    target.closest(".backlog-item") &&
+                    target.closest(".backlog-item").style.borderColor
+                )
+                    return true;
+                return false;
+            }
+
+            // Cancel cut on click (desktop + fallback)
             document.addEventListener(
                 "click",
                 function (e) {
                     if (!_cutItem) return;
-                    var target = e.target;
-                    // Don't cancel if clicking paste zones or cut items
-                    if (target.closest(".paste-zone")) return;
-                    if (target.closest("[data-paste-zone]")) return;
-                    if (target.id === "sidebar-bl-input" && target.readOnly)
-                        return;
-                    if (
-                        target.closest(".task-item") &&
-                        target.closest(".task-item").style.background
-                    )
-                        return;
-                    if (
-                        target.closest(".backlog-item") &&
-                        target.closest(".backlog-item").style.borderColor
-                    )
-                        return;
-                    // Anything else = cancel
+                    if (_isPasteOrCutZone(e.target)) return;
                     cancelCut();
                 },
                 true,
+            );
+
+            // Cancel cut on touchend for iOS PWA where click events on empty space are unreliable
+            var _cutTouchMoved = false;
+            document.addEventListener(
+                "touchstart",
+                function () {
+                    _cutTouchMoved = false;
+                },
+                { passive: true },
+            );
+            document.addEventListener(
+                "touchmove",
+                function () {
+                    _cutTouchMoved = true;
+                },
+                { passive: true },
+            );
+            document.addEventListener(
+                "touchend",
+                function (e) {
+                    if (!_cutItem || _cutTouchMoved) return;
+                    var target = e.target;
+                    if (_isPasteOrCutZone(target)) return;
+                    // Small delay so paste onclick can fire first if target was a paste zone
+                    setTimeout(function () {
+                        if (_cutItem) cancelCut();
+                    }, 150);
+                },
+                { passive: true },
             );
             function pasteToDay(ds) {
                 if (!_cutItem) return;
