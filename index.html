@@ -208,6 +208,9 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .backlog-item .bl-edit:focus{border-bottom:1px solid var(--ink)}
 .backlog-item .bl-del{background:transparent;border:none;cursor:pointer;color:var(--line2);font-size:.6rem;padding:.1rem .2rem;line-height:1;flex-shrink:0;transition:color .1s;opacity:.4}
 .backlog-item .bl-del:hover{color:var(--red);opacity:1}
+.bl-item-cut{background:var(--blue-bg);border-color:var(--blue)}
+.bl-item-dimmed{pointer-events:none}
+.card.in-cut .btn-sage{opacity:.3;pointer-events:none}
 
 /* cut state */
 .backlog-item.bl-cut{border-style:dashed;border-color:var(--blue);background:var(--blue-bg);opacity:.8}
@@ -774,39 +777,41 @@ function renderSidebarBacklog(){
   var el=document.getElementById('sidebar-backlog-list');
   var inputWrap=document.getElementById('sidebar-bl-input');
   var inputBtn=inputWrap?inputWrap.nextElementSibling:null;
+  var card=el?el.closest('.card'):null;
   if(!el)return;
 
-  // During cut mode: transform input
-  if(_cutItem&&_cutItem.type==='task'){
-    // Cutting from timeline — input becomes paste-to-backlog zone
-    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.onclick=function(){pasteToBacklog()};}
-    if(inputBtn){inputBtn.style.display='none';}
-  } else if(_cutItem){
-    // Cutting from backlog — just dim
-    if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';}
-    if(inputBtn){inputBtn.style.display='none';}
-  } else {
-    if(inputWrap){inputWrap.readOnly=false;inputWrap.placeholder='+ nowe zadanie...';inputWrap.style.background='';inputWrap.style.borderColor='';inputWrap.style.borderStyle='';inputWrap.style.color='';inputWrap.style.opacity='';inputWrap.onclick=null;}
-    if(inputBtn){inputBtn.style.display='';}
+  // Always render same DOM, apply cut-mode via CSS class on card
+  if(card){
+    if(_cutItem) card.classList.add('in-cut');
+    else card.classList.remove('in-cut');
+    if(_cutItem&&_cutItem.type==='task') card.classList.add('in-cut-task');
+    else card.classList.remove('in-cut-task');
   }
 
+  // Transform input for paste-to-backlog (no DOM change, just attrs)
+  if(_cutItem&&_cutItem.type==='task'){
+    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.onclick=function(){pasteToBacklog()};}
+  } else if(_cutItem){
+    if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';}
+  } else {
+    if(inputWrap){inputWrap.readOnly=false;inputWrap.placeholder='+ nowe zadanie...';inputWrap.style.background='';inputWrap.style.borderColor='';inputWrap.style.borderStyle='';inputWrap.style.color='';inputWrap.style.opacity='';inputWrap.onclick=null;}
+  }
+
+  // Always same structure — use classes for cut state
   var h='';
   S.backlog.forEach(function(item){
     var isCut=_cutItem&&_cutItem.type==='backlog'&&_cutItem.id===item.id;
-    if(_cutItem&&!isCut){
-      // Not the cut item — dimmed, non-interactive, same structure
-      h+='<div class="backlog-item" style="opacity:.4;pointer-events:none">';
-      h+='<span class="bl-del" style="visibility:hidden">✕</span>';
-      h+='<span style="font-size:.78rem;font-weight:400;flex:1">'+item.name+'</span>';
+    if(isCut){
+      h+='<div class="backlog-item bl-item-cut" draggable="false">';
+      h+='<button class="bl-del" style="visibility:hidden" disabled>✕</button>';
+      h+='<input type="text" class="bl-edit" value="✂ '+item.name.replace(/"/g,'&quot;')+'" readonly style="color:var(--blue);opacity:.6">';
       h+='</div>';
-    } else if(isCut){
-      // The cut item — blue tint, show name
-      h+='<div class="backlog-item" style="background:var(--blue-bg);border-color:var(--blue);opacity:.6">';
-      h+='<span class="bl-del" style="visibility:hidden">✕</span>';
-      h+='<span style="font-size:.78rem;font-weight:400;color:var(--blue);flex:1">✂ '+item.name+'</span>';
+    } else if(_cutItem){
+      h+='<div class="backlog-item bl-item-dimmed" draggable="false">';
+      h+='<button class="bl-del" style="visibility:hidden" disabled>✕</button>';
+      h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" readonly style="opacity:.4">';
       h+='</div>';
     } else {
-      // Normal mode
       h+='<div class="backlog-item" draggable="true" data-id="'+item.id+'" ondragstart="onBacklogDragStart(event,'+item.id+')" ontouchstart="onBlItemTouchStart(event,'+item.id+')" ontouchend="onBlItemTouchEnd(event)" ontouchmove="onBlItemTouchMove(event)">';
       h+='<button class="bl-del" onclick="event.stopPropagation();removeBacklogItem('+item.id+')" title="Usuń">✕</button>';
       h+='<input type="text" class="bl-edit" value="'+item.name.replace(/"/g,'&quot;')+'" data-id="'+item.id+'" onblur="onBacklogBlur(this)" onkeydown="onBacklogEditKey(event,this)">';
