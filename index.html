@@ -1652,22 +1652,29 @@ function toggleDayOff(ds){
   save();renderCalendar();renderTasks();
 }
 var _calLpTimer=null;
+var _calLpFired=false;
 function onCalCellTouchStart(e,ds){
+  _calLpFired=false;
   _calLpTimer=setTimeout(function(){
-    e.target.closest('.cal-cell').setAttribute('data-longpress','1');
+    _calLpFired=true;
     toggleDayOff(ds);
     if(navigator.vibrate)navigator.vibrate(30);
   },500);
 }
 function onCalCellTouchEnd(e){
   clearTimeout(_calLpTimer);
-  var cell=e.target.closest('.cal-cell');
-  if(cell&&cell.getAttribute('data-longpress')==='1'){
-    cell.removeAttribute('data-longpress');
+  if(_calLpFired){
     e.preventDefault();
+    e.stopPropagation();
+    _calLpFired=false;
   }
 }
 function onCalCellTouchMove(){clearTimeout(_calLpTimer)}
+function calClickGuard(ds){
+  // Don't fire calClick if long-press just happened
+  if(_calLpFired){_calLpFired=false;return;}
+  calClick(ds);
+}
 
 function renderCalendar(){
   document.getElementById('month-label').textContent=MONTHS[S.calM]+' '+S.calY;
@@ -1705,7 +1712,7 @@ function renderCalendar(){
     S.deadlines.filter(function(d){return d.date===ds}).slice(0,1).forEach(function(d){dots+='<div class="cal-dot d">⚑ '+d.name.slice(0,10)+'</div>'});
     getIcsEventsForDate(ds).slice(0,2).forEach(function(e){dots+='<div class="cal-dot" style="background:'+e.color+'15;color:'+e.color+'">'+(e.timeFrom?e.timeFrom+' ':'')+e.summary.slice(0,10)+'</div>'});
 
-    return'<div class="cal-cell'+(isT?' today':'')+(hasDeadline?' has-deadline':'')+'"'+touch+' onclick="calClick(\''+ds+'\')"><div class="cal-num">'+c.day+'</div>'+dots+'</div>';
+    return'<div class="cal-cell'+(isT?' today':'')+(hasDeadline?' has-deadline':'')+'"'+touch+' onclick="calClickGuard(\''+ds+'\')"><div class="cal-num">'+c.day+'</div>'+dots+'</div>';
   }).join('');
 }
 
