@@ -807,11 +807,11 @@ function renderSidebarBacklog(){
 
   // Transform input for paste-to-backlog (no DOM change, just attrs)
   if(_cutItem&&_cutItem.type==='task'){
-    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.onclick=function(){pasteToBacklog()};}
+    if(inputWrap){inputWrap.value='';inputWrap.placeholder='+ wklej do zadań';inputWrap.readOnly=true;inputWrap.style.background='var(--blue-bg)';inputWrap.style.borderColor='var(--blue)';inputWrap.style.borderStyle='dashed';inputWrap.style.color='var(--blue)';inputWrap.classList.add('paste-zone');inputWrap.onclick=function(){pasteToBacklog()};}
   } else if(_cutItem){
-    if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';}
+    if(inputWrap){inputWrap.readOnly=true;inputWrap.style.opacity='.3';inputWrap.classList.remove('paste-zone');}
   } else {
-    if(inputWrap){inputWrap.readOnly=false;inputWrap.placeholder='+ nowe zadanie...';inputWrap.style.background='';inputWrap.style.borderColor='';inputWrap.style.borderStyle='';inputWrap.style.color='';inputWrap.style.opacity='';inputWrap.onclick=null;}
+    if(inputWrap){inputWrap.readOnly=false;inputWrap.placeholder='+ nowe zadanie...';inputWrap.style.background='';inputWrap.style.borderColor='';inputWrap.style.borderStyle='';inputWrap.style.color='';inputWrap.style.opacity='';inputWrap.classList.remove('paste-zone');inputWrap.onclick=null;}
   }
 
   // Always same structure — use classes for cut state
@@ -1052,7 +1052,7 @@ function renderTasks(){
     if(itemsHtml)rowHtml+='<div class="day-tasks-list">'+itemsHtml+'</div>';
     rowHtml+='<div class="day-add-row" id="dar-'+ds+'">';
     if(_cutItem){
-      rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ wklej tutaj" readonly onclick="pasteToDay(\''+ds+'\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
+      rowHtml+='<input class="day-quick-input paste-zone" id="qi-'+ds+'" placeholder="+ wklej tutaj" readonly data-paste-zone="1" onclick="pasteToDay(\''+ds+'\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
     } else {
       rowHtml+='<input class="day-quick-input" id="qi-'+ds+'" placeholder="+ dodaj zadanie..." onfocus="showDayTimeInputs(\''+ds+'\')" onkeydown="onDayKeydown(event,\''+ds+'\')" oninput="onDayInput(event,\''+ds+'\')">';
     }
@@ -1655,7 +1655,8 @@ document.addEventListener('click',function(e){
   if(!_cutItem)return;
   var target=e.target;
   // Don't cancel if clicking paste zones or cut items
-  if(target.closest('[onclick*="pasteTo"]'))return;
+  if(target.closest('.paste-zone'))return;
+  if(target.closest('[data-paste-zone]'))return;
   if(target.id==='sidebar-bl-input'&&target.readOnly)return;
   if(target.closest('.task-item')&&target.closest('.task-item').style.background)return;
   if(target.closest('.backlog-item')&&target.closest('.backlog-item').style.borderColor)return;
@@ -1765,6 +1766,11 @@ function initTaskHandlers(){
   grid.addEventListener('touchend',function(e){
     clearTimeout(timer);
     if(fired){
+      // Don't suppress click on paste zones — user needs single-tap paste
+      if(e.target.closest('.paste-zone')){
+        fired=false;
+        return;
+      }
       e.preventDefault();
       e.stopImmediatePropagation();
       setTimeout(function(){fired=false},300);
