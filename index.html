@@ -543,7 +543,7 @@ async function verifyPin(){
     if(result === 'ok'){
       var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
       if(dataRes.data && dataRes.data.data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],icsCompleted:[],
           calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
       }
     }
@@ -572,7 +572,7 @@ function showApp(){
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:TABLE},function(payload){
       var data = payload.new && payload.new.data;
       if(data){
-        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],
+        S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],icsCompleted:[],
           calY:new Date().getFullYear(),calM:new Date().getMonth()}, data);
         refreshAll();
       }
@@ -606,7 +606,7 @@ async function autoLogin(){
     });
     var dataRes = await supa.from(TABLE).select('data').eq('id', ROW_ID).single();
     if(dataRes.data && dataRes.data.data){
-      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],
+      S = Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],icsCompleted:[],
         calY:new Date().getFullYear(),calM:new Date().getMonth()}, dataRes.data.data);
     }
     showApp();
@@ -627,7 +627,7 @@ async function checkFirstRun(){
 }
 
 // ── STATE ──────────────────────────────────────────────
-var S = {tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],
+var S = {tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],icsCompleted:[],
          calY:new Date().getFullYear(),calM:new Date().getMonth()};
 function getToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 var TODAY = getToday();
@@ -654,7 +654,7 @@ function save(){
 
 function loadLocal(){
   try{var d=localStorage.getItem('zspl2');
-    if(d)S=Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],
+    if(d)S=Object.assign({tasks:[],deadlines:[],books:[],backlog:[],icsFeeds:[],daysOff:[],icsCompleted:[],
       calY:new Date().getFullYear(),calM:new Date().getMonth()},JSON.parse(d));
   }catch(e){}
 }
@@ -1006,11 +1006,15 @@ function renderTasks(){
         }
       } else {
         var e=m.data;
-        itemsHtml+='<div class="task-item ics-item" style="pointer-events:none">';
-        itemsHtml+='<span style="width:15px;flex-shrink:0"></span>';
-        itemsHtml+='<span style="font-size:.65rem;font-weight:600;color:'+e.color+';flex-shrink:0;width:32px;text-align:center">'+(e.timeFrom||'')+'</span>';
-        itemsHtml+='<span style="font-size:.7rem;font-weight:500;padding:.1rem .4rem;border-radius:99px;background:'+e.color+'18;color:'+e.color+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.summary+'</span>';
-        itemsHtml+='</div>';
+        var icsKey=e.date+'|'+e.summary+'|'+(e.timeFrom||'');
+        var icsDone=(S.icsCompleted||[]).indexOf(icsKey)!==-1;
+        if(!icsDone){
+          itemsHtml+='<div class="task-item">';
+          itemsHtml+='<input type="checkbox" onchange="completeIcs(\''+icsKey.replace(/'/g,"\\'")+'\')">';
+          itemsHtml+='<button class="task-time-btn" style="color:'+e.color+'" disabled>'+(e.timeFrom||'–:–')+'</button>';
+          itemsHtml+='<input type="text" class="task-name-edit" value="'+e.summary.replace(/"/g,'&quot;')+'" readonly style="color:'+e.color+';background:transparent">';
+          itemsHtml+='</div>';
+        }
       }
     });
 
@@ -1100,6 +1104,11 @@ function undoComplete(){
   }
   clearTimeout(_undoTimer);
   _undoTask=null;
+  save();renderTasks();
+}
+function completeIcs(key){
+  if(!S.icsCompleted)S.icsCompleted=[];
+  if(S.icsCompleted.indexOf(key)===-1)S.icsCompleted.push(key);
   save();renderTasks();
 }
 function removeTask(id){S.tasks=S.tasks.filter(function(x){return x.id!==id});save();renderTasks()}
@@ -1197,8 +1206,18 @@ function addBook(){
   var c=document.getElementById('b-chapter').value.trim();
   var days=parseInt(document.getElementById('b-days').value)||1;
   if(!t)return alert('Podaj tytuł.');
-  S.books.push({id:Date.now(),title:t,status:s,chapter:c,days:days});
-  save();renderBooks();syncBookBacklog();
+  var bookId=Date.now();
+  S.books.push({id:bookId,title:t,status:s,chapter:c,days:days});
+  // Add to backlog directly if not "przeczytana"
+  if(s!=='przeczytana'){
+    var dailyPortion=calcDailyPortion(c,days);
+    var label='📖 '+t.slice(0,30)+(dailyPortion?' — '+dailyPortion:'');
+    var base=Date.now()+1;
+    for(var i=0;i<days;i++){
+      S.backlog.push({id:base+i,name:label,_bookId:bookId});
+    }
+  }
+  save();renderBooks();renderSidebarBacklog();
   ['b-title','b-chapter'].forEach(function(id){document.getElementById(id).value=''});
   document.getElementById('b-days').value='1';
 }
@@ -1260,13 +1279,35 @@ function calcDailyPortion(chapter,days){
   }
   return '';
 }
-function changeBook(id,val){var b=S.books.find(function(x){return x.id===id});if(b)b.status=val;save();renderBooks();syncBookBacklog();}
-function removeBook(id){S.books=S.books.filter(function(x){return x.id!==id});save();renderBooks();syncBookBacklog();}
+function changeBook(id,val){
+  var b=S.books.find(function(x){return x.id===id});
+  if(b){
+    b.status=val;
+    // Remove this book's backlog entries
+    S.backlog=S.backlog.filter(function(x){return x._bookId!==id});
+    // Re-add if not przeczytana
+    if(val!=='przeczytana'){
+      var dailyPortion=calcDailyPortion(b.chapter,b.days||1);
+      var label='📖 '+b.title.slice(0,30)+(dailyPortion?' — '+dailyPortion:'');
+      var base=Date.now();
+      for(var i=0;i<(b.days||1);i++){
+        S.backlog.push({id:base+i,name:label,_bookId:id});
+      }
+    }
+  }
+  save();renderBooks();renderSidebarBacklog();
+}
+function removeBook(id){
+  S.books=S.books.filter(function(x){return x.id!==id});
+  S.backlog=S.backlog.filter(function(x){return x._bookId!==id});
+  save();renderBooks();renderSidebarBacklog();
+}
 function removeBookFromModal(){
+  S.backlog=S.backlog.filter(function(x){return x._bookId!==editingBookId});
   S.books=S.books.filter(function(x){return x.id!==editingBookId});
   document.getElementById('edit-book-modal').style.display='none';
   editingBookId=null;
-  save();renderBooks();syncBookBacklog();
+  save();renderBooks();renderSidebarBacklog();
 }
 
 // Sync book reading tasks into backlog
@@ -1274,13 +1315,15 @@ function syncBookBacklog(){
   // Remove old auto-generated book tasks from backlog
   S.backlog=S.backlog.filter(function(x){return!x._bookId});
   // Add tasks for "w trakcie" and "do przeczytania" books
+  var idBase=Date.now();
+  var idCounter=0;
   S.books.forEach(function(b){
     if(b.status==='przeczytana')return;
     var days=b.days||1;
     var dailyPortion=calcDailyPortion(b.chapter,days);
     var label='📖 '+b.title.slice(0,30)+(dailyPortion?' — '+dailyPortion:'');
     for(var i=0;i<days;i++){
-      S.backlog.push({id:Date.now()+i,name:label,_bookId:b.id});
+      S.backlog.push({id:idBase+(idCounter++),name:label,_bookId:b.id});
     }
   });
   save();renderSidebarBacklog();
@@ -1306,13 +1349,24 @@ function closeBookModal(e){
 function saveBookModal(){
   var b=S.books.find(function(x){return x.id===editingBookId});
   if(!b)return;
+  var oldBookId=editingBookId;
   b.title=document.getElementById('ebm-title').value.trim()||b.title;
   b.chapter=document.getElementById('ebm-chapter').value.trim();
   b.days=parseInt(document.getElementById('ebm-days').value)||1;
   b.status=document.getElementById('ebm-status').value;
   document.getElementById('edit-book-modal').style.display='none';
   editingBookId=null;
-  save();renderBooks();syncBookBacklog();
+  // Remove only this book's backlog entries, then re-add if needed
+  S.backlog=S.backlog.filter(function(x){return x._bookId!==oldBookId});
+  if(b.status!=='przeczytana'){
+    var dailyPortion=calcDailyPortion(b.chapter,b.days);
+    var label='📖 '+b.title.slice(0,30)+(dailyPortion?' — '+dailyPortion:'');
+    var base=Date.now();
+    for(var i=0;i<b.days;i++){
+      S.backlog.push({id:base+i,name:label,_bookId:oldBookId});
+    }
+  }
+  save();renderBooks();renderSidebarBacklog();
 }
 
 // ── BACKLOG MODAL ──────────────────────────────────────
@@ -1850,6 +1904,16 @@ setInterval(function(){
 setInterval(function(){
   if((S.icsFeeds||[]).length>0) fetchAllIcsFeeds();
 },300000);
+
+// Prevent iOS scroll jump on input focus
+document.addEventListener('focus',function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA'){
+    var sy=window.scrollY;
+    setTimeout(function(){window.scrollTo(0,sy)},50);
+    setTimeout(function(){window.scrollTo(0,sy)},150);
+    setTimeout(function(){window.scrollTo(0,sy)},300);
+  }
+},true);
 
 </script>
 </body>
