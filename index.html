@@ -94,9 +94,9 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 /* ── task rows ── */
 .task-item{display:flex;align-items:center;gap:.4rem;padding:.25rem .1rem;margin-bottom:.05rem;transition:opacity .3s;line-height:1.2;border-radius:var(--r-sm)}
 .task-item:hover{background:var(--accent-bg)}
-.task-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--ink)}
-.task-time-btn{background:none;border:none;padding:.1rem 0;font-family:'Syne',sans-serif;font-size:.65rem;font-weight:600;color:var(--ink3);cursor:pointer;flex-shrink:0;width:32px;text-align:center}
-.task-time-btn.has-time{color:var(--blue)}
+.task-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--ink);margin-right:.3rem}
+.task-time-btn{background:none;border:none;padding:.1rem 0;font-family:'Syne',sans-serif;font-size:.72rem;font-weight:600;color:var(--ink);cursor:pointer;flex-shrink:0;width:32px;text-align:center}
+.task-time-btn.has-time{color:var(--ink)}
 .task-time-btn.overdue{color:var(--red);font-size:.8rem}
 .task-item.task-overdue .task-name-edit{color:var(--red)}
 .task-time-input{width:52px;padding:0;font-size:.7rem;font-weight:600;font-family:'Syne',sans-serif;border:none;border-bottom:1px solid var(--blue);border-radius:0;color:var(--blue);text-align:center;background:transparent;outline:none;-webkit-appearance:none}
@@ -160,14 +160,14 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .cal-nav span{font-size:.85rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;flex:1;text-align:center}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:transparent}
 .cal-hdr{text-align:center;font-size:.65rem;color:var(--ink3);font-weight:700;padding:.35rem 0;background:var(--bg);text-transform:uppercase;letter-spacing:.08em}
-.cal-cell{min-height:72px;border-radius:var(--r-sm);padding:.35rem .4rem;background:var(--bg);border:1px solid var(--line);cursor:pointer;transition:background .1s;vertical-align:top}
+.cal-cell{min-height:72px;border-radius:var(--r-sm);padding:.35rem .4rem;background:var(--bg);border:1px solid var(--line);cursor:pointer;transition:background .1s;vertical-align:top;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .cal-cell:hover{background:var(--accent-bg)}
 .cal-cell.today{background:var(--bg);border:2px solid #c0607a}
 .cal-cell.today .cal-num{color:#c0607a}
 .cal-cell.has-deadline{background:#ffd6e3}
 .cal-cell.has-deadline .cal-num{color:#c0607a}
 .cal-cell.other{opacity:.3}
-.cal-cell.past,.cal-cell.day-off,.cal-cell.sunday{background:repeating-linear-gradient(135deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px);pointer-events:none}
+.cal-cell.past,.cal-cell.day-off,.cal-cell.sunday{background:repeating-linear-gradient(135deg,#efefef,#efefef 4px,#e5e5e5 4px,#e5e5e5 8px);pointer-events:none}
 .cal-cell.past{opacity:.4}
 .cal-cell.sunday{opacity:.5}
 .cal-cell.sunday .cal-num{color:#bbb}
@@ -234,10 +234,10 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
 .past-days-details .month-grid{border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm)}
 
 /* sunday block */
-.day-row.is-sunday .day-num-col{background:#f5f5f5}
+.day-row.is-sunday .day-num-col{background:#e8e8e8}
 .day-row.is-sunday .day-num{color:#bbb}
 .day-row.is-sunday .day-name{color:#ccc}
-.day-sunday-block{flex:1;background:repeating-linear-gradient(135deg,#fafafa,#fafafa 4px,#f3f3f3 4px,#f3f3f3 8px);cursor:not-allowed}
+.day-sunday-block{flex:1;background:repeating-linear-gradient(135deg,#efefef,#efefef 4px,#e5e5e5 4px,#e5e5e5 8px);cursor:not-allowed}
 
 /* ── empty ── */
 .empty-msg{text-align:center;padding:2rem;color:var(--ink3);font-size:.775rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
@@ -413,6 +413,12 @@ h3{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
         <div style="margin-top:.75rem">
           <button class="btn btn-sm" onclick="if(confirm('Wylogować? Będziesz musiał podać PIN ponownie.')){try{localStorage.removeItem('planer_pin_hash')}catch(e){}location.reload()}" style="color:var(--red);border-color:var(--red)">Wyloguj (resetuj sesję)</button>
         </div>
+      </div>
+    </details>
+
+    <details class="past-days-details" style="margin-bottom:1rem">
+      <summary class="past-days-summary">📋 Poprzednie dni</summary>
+      <div id="settings-past-days" style="border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:1rem 1.25rem">
       </div>
     </details>
 
@@ -676,7 +682,7 @@ function showTab(n){
     updateCalLegend();
     renderCalendar();
   }
-  if(n==='settings'){renderIcsFeeds();}
+  if(n==='settings'){renderIcsFeeds();renderPastDays();}
   if(n==='tasks'){renderTasks();renderSidebarBacklog();}
   if(n==='deadlines')renderDeadlines();
   if(n==='books'){renderBooks();}
@@ -1037,19 +1043,7 @@ function renderTasks(){
     return ds<TODAY;
   }).length;
 
-  var pastSection='';
-  if(htmlPast){
-    pastSection='<details class="past-days-details"><summary class="past-days-summary">Poprzednie dni ('+pastCount+')</summary><div class="month-grid">'+htmlPast+'</div></details>';
-  }
-
-  var undoBanner='';
-  if(_undoTask){
-    undoBanner='<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;background:var(--accent-bg);border-radius:var(--r-sm);margin-bottom:.5rem;font-size:.75rem;color:var(--ink2)">';
-    undoBanner+='<span style="flex:1">✓ <s>'+_undoTask.task.name+'</s></span>';
-    undoBanner+='<button class="btn btn-sm" onclick="undoComplete()" style="font-size:.7rem">Cofnij</button>';
-    undoBanner+='</div>';
-  }
-  grid.innerHTML=undoBanner+htmlFuture+pastSection;
+  grid.innerHTML=htmlFuture;
 
 }
 
@@ -1062,18 +1056,25 @@ function completeTask(id){
   if(row){
     var nm=row.querySelector('.task-name-edit');
     if(nm){nm.style.textDecoration='line-through';nm.style.color='var(--ink3)';nm.readOnly=true;}
+    var cb=row.querySelector('input[type=checkbox]');
+    if(cb)cb.disabled=true;
   }
   setTimeout(function(){
     t.done=true;
     _undoTask={id:t.id,task:JSON.parse(JSON.stringify(t))};
-    save();renderTasks();
+    // Replace the row content inline with undo row
+    if(row){
+      row.innerHTML='<input type="checkbox" checked disabled style="opacity:.3">'
+        +'<span class="task-time-btn" style="opacity:.3">'+(t.from||'–:–')+'</span>'
+        +'<span style="font-size:.78rem;font-weight:400;color:var(--ink3);flex:1;text-decoration:line-through">'+t.name+'</span>'
+        +'<button class="btn btn-sm" onclick="undoComplete()" style="font-size:.65rem;flex-shrink:0">Cofnij</button>';
+    }
+    save();
     clearTimeout(_undoTimer);
     _undoTimer=setTimeout(function(){
       if(_undoTask&&_undoTask.id===id){
-        // permanently remove after 5s
-        S.tasks=S.tasks.filter(function(x){return x.id!==id});
         _undoTask=null;
-        save();renderTasks();
+        renderTasks();
       }
     },5000);
   },500);
@@ -1194,9 +1195,7 @@ function renderBooks(){
   var pl=document.getElementById('books-progress');
   var el=document.getElementById('books-list');
   if(!S.books.length){pl.innerHTML='';el.innerHTML='<div class="empty-msg">Brak pozycji.</div>';return}
-  var tot=S.books.length,done=S.books.filter(function(b){return b.status==='przeczytana'}).length;
-  var pct=Math.round(done/tot*100);
-  pl.innerHTML='<div class="card" style="padding:1rem 1.5rem;margin-bottom:1rem"><div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.4rem"><span>Przeczytane: <strong>'+done+'/'+tot+'</strong></span><span style="color:var(--ink3)">'+pct+'%</span></div><div class="progress-wrap"><div class="progress-fill" style="width:'+pct+'%"></div></div></div>';
+  pl.innerHTML='';
   var statusBadge={'do przeczytania':'b-gray','w trakcie':'b-gold','przeczytana':'b-sage'};
   var groups={'do przeczytania':[],'w trakcie':[],'przeczytana':[]};
   S.books.forEach(function(b){groups[b.status].push(b)});
@@ -1221,9 +1220,12 @@ function renderBooks(){
     });
     return s;
   }
-  h+=sec(groups['przeczytana'],'✓ Przeczytane');
-  h+=sec(groups['w trakcie'],'📖 W trakcie');
   h+=sec(groups['do przeczytania'],'📚 Do przeczytania');
+  h+=sec(groups['w trakcie'],'📖 W trakcie');
+  if(groups['przeczytana'].length){
+    h+='<hr style="border:none;border-top:2px solid var(--line);margin:1.25rem 0">';
+    h+=sec(groups['przeczytana'],'✓ Przeczytane');
+  }
   el.innerHTML=h;
 }
 function calcDailyPortion(chapter,days){
@@ -1260,9 +1262,9 @@ function removeBookFromModal(){
 function syncBookBacklog(){
   // Remove old auto-generated book tasks from backlog
   S.backlog=S.backlog.filter(function(x){return!x._bookId});
-  // Add tasks for "w trakcie" books
+  // Add tasks for "w trakcie" and "do przeczytania" books
   S.books.forEach(function(b){
-    if(b.status!=='w trakcie')return;
+    if(b.status==='przeczytana')return;
     var days=b.days||1;
     var dailyPortion=calcDailyPortion(b.chapter,days);
     var label='📖 '+b.title.slice(0,30)+(dailyPortion?' — '+dailyPortion:'');
@@ -1499,7 +1501,9 @@ function cutBacklogItem(id){
   if(!item)return;
   _cutItem={type:'backlog',id:id,name:item.name};
   document.body.classList.add('cut-mode');
+  var scrollY=window.scrollY;
   renderSidebarBacklog();renderTasks();
+  window.scrollTo(0,scrollY);
   setTimeout(function(){if(_cutItem&&_cutItem.id===id){cancelCut();}},15000);
 }
 function cutTaskItem(id){
@@ -1507,13 +1511,17 @@ function cutTaskItem(id){
   if(!t)return;
   _cutItem={type:'task',id:id,name:t.name};
   document.body.classList.add('cut-mode');
+  var scrollY=window.scrollY;
   renderTasks();renderSidebarBacklog();
+  window.scrollTo(0,scrollY);
   setTimeout(function(){if(_cutItem&&_cutItem.id===id){cancelCut();}},15000);
 }
 function cancelCut(){
   _cutItem=null;
   document.body.classList.remove('cut-mode');
+  var scrollY=window.scrollY;
   renderSidebarBacklog();renderTasks();
+  window.scrollTo(0,scrollY);
 }
 
 // Cancel cut when clicking outside paste zones
@@ -1531,6 +1539,7 @@ document.addEventListener('click',function(e){
 function pasteToDay(ds){
   if(!_cutItem)return;
   if(new Date(ds).getDay()===0||isDayOff(ds)){alert('Ten dzień jest wolny.');return;}
+  var scrollY=window.scrollY;
   if(_cutItem.type==='backlog'){
     S.tasks.push({id:Date.now(),name:_cutItem.name,date:ds,from:'',done:false});
     S.backlog=S.backlog.filter(function(x){return x.id!==_cutItem.id});
@@ -1542,9 +1551,11 @@ function pasteToDay(ds){
   document.body.classList.remove('cut-mode');
   var d=new Date(ds);taskViewY=d.getFullYear();taskViewM=d.getMonth();
   save();renderTasks();renderSidebarBacklog();
+  window.scrollTo(0,scrollY);
 }
 function pasteToBacklog(){
   if(!_cutItem||_cutItem.type!=='task')return;
+  var scrollY=window.scrollY;
   var t=S.tasks.find(function(x){return x.id===_cutItem.id});
   if(t){
     S.backlog.push({id:Date.now(),name:t.name});
@@ -1553,6 +1564,7 @@ function pasteToBacklog(){
   _cutItem=null;
   document.body.classList.remove('cut-mode');
   save();renderTasks();renderSidebarBacklog();
+  window.scrollTo(0,scrollY);
 }
 
 // Long-press handler for backlog items
@@ -1697,6 +1709,37 @@ function calClick(ds){
   taskViewY=d.getFullYear();taskViewM=d.getMonth();
   focusedDay=ds;
   showTab('tasks');
+}
+
+function renderPastDays(){
+  var el=document.getElementById('settings-past-days');
+  if(!el)return;
+  var MNAMES=['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+  var DNAMES=['Nd','Pon','Wt','Śr','Czw','Pt','Sob'];
+  // Collect all dates with completed tasks
+  var doneTasks=S.tasks.filter(function(t){return t.done});
+  if(!doneTasks.length){el.innerHTML='<div class="empty-msg">Brak poprzednich dni.</div>';return;}
+  // Group by date
+  var byDate={};
+  doneTasks.forEach(function(t){
+    if(!byDate[t.date])byDate[t.date]=[];
+    byDate[t.date].push(t);
+  });
+  var dates=Object.keys(byDate).sort().reverse();
+  var h='';
+  dates.forEach(function(ds){
+    var d=new Date(ds);
+    var dname=DNAMES[d.getDay()];
+    var day=d.getDate();
+    var month=MNAMES[d.getMonth()];
+    h+='<div style="margin-bottom:.75rem">';
+    h+='<div style="font-size:.75rem;font-weight:700;color:var(--ink3);margin-bottom:.25rem">'+day+' '+month+' ('+dname+')</div>';
+    byDate[ds].forEach(function(t){
+      h+='<div style="font-size:.75rem;color:var(--ink2);padding:.1rem 0;text-decoration:line-through">'+(t.from?t.from+' ':'')+t.name+'</div>';
+    });
+    h+='</div>';
+  });
+  el.innerHTML=h;
 }
 
 // ── init ───────────────────────────────────────────────
