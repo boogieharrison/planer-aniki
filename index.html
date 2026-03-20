@@ -79,9 +79,31 @@
             body.cut-mode .bl-edit,
             body.cut-mode .bl-del,
             body.cut-mode #sidebar-bl-input:not(.paste-zone),
-            body.cut-mode nav button {
+            body.cut-mode nav button,
+            body.cut-mode .card:not(.in-cut) input,
+            body.cut-mode .card:not(.in-cut) button,
+            body.cut-mode .card:not(.in-cut) select,
+            body.cut-mode .card:not(.in-cut) textarea,
+            body.cut-mode header button,
+            body.cut-mode .backlog-item:not(.bl-item-cut) .bl-edit,
+            body.cut-mode .backlog-item:not(.bl-item-cut) .bl-del {
                 pointer-events: none !important;
                 opacity: 0.3 !important;
+            }
+            /* In cut mode, prevent all inputs from receiving focus except paste zones */
+            body.cut-mode input:not(.paste-zone),
+            body.cut-mode textarea:not(.paste-zone),
+            body.cut-mode select:not(.paste-zone) {
+                pointer-events: none !important;
+                -webkit-user-select: none !important;
+                user-select: none !important;
+            }
+            /* Re-enable paste zones explicitly */
+            body.cut-mode .paste-zone,
+            body.cut-mode [data-paste-zone] {
+                pointer-events: auto !important;
+                opacity: 1 !important;
+                cursor: pointer !important;
             }
             .task-item,
             .backlog-item,
@@ -1748,7 +1770,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.64 · 20.03.2026, 01:40
+                    Planer Aniki v0.65 · 20.03.2026, 01:57
                 </div>
             </div>
         </div>
@@ -2152,13 +2174,11 @@
                 _saveTimer = setTimeout(async function () {
                     setSyncStatus("saving");
                     try {
-                        await supa
-                            .from(TABLE)
-                            .upsert({
-                                id: ROW_ID,
-                                data: JSON.parse(JSON.stringify(S)),
-                                pin_hash: APP_PIN_HASH,
-                            });
+                        await supa.from(TABLE).upsert({
+                            id: ROW_ID,
+                            data: JSON.parse(JSON.stringify(S)),
+                            pin_hash: APP_PIN_HASH,
+                        });
                         setSyncStatus("ok");
                     } catch (e) {
                         console.error("Supabase save error:", e);
@@ -2324,20 +2344,10 @@
             }
             function onDayInput(e, ds) {}
             function onDayInputBlur(ds) {
-                // Delay to allow click on "Dodaj" or time input to register first
-                setTimeout(function () {
-                    var inp = document.getElementById("qi-" + ds);
-                    if (!inp) return;
-                    // If input is empty and focus moved away from this day's controls
-                    if (inp.value.trim() === "") {
-                        var active = document.activeElement;
-                        var timeWrap = document.getElementById("qt-wrap-" + ds);
-                        // Don't cancel if focus moved to time input or Dodaj button within same day
-                        if (active && timeWrap && timeWrap.contains(active))
-                            return;
-                        cancelDayInput(ds);
-                    }
-                }, 150);
+                var inp = document.getElementById("qi-" + ds);
+                if (inp && !inp.value.trim()) {
+                    cancelDayInput(ds);
+                }
             }
             function cancelDayInput(ds) {
                 var inp = document.getElementById("qi-" + ds);
@@ -3896,6 +3906,7 @@
                     return x.id === id;
                 });
                 if (!item) return;
+                if (document.activeElement) document.activeElement.blur();
                 _cutItem = { type: "backlog", id: id, name: item.name };
                 document.body.classList.add("cut-mode");
                 var scrollY = window.scrollY;
@@ -3908,6 +3919,7 @@
                     return x.id === id;
                 });
                 if (!t) return;
+                if (document.activeElement) document.activeElement.blur();
                 _cutItem = { type: "task", id: id, name: t.name };
                 document.body.classList.add("cut-mode");
                 var scrollY = window.scrollY;
@@ -3924,10 +3936,35 @@
                 window.scrollTo(0, scrollY);
             }
 
-            // Detect if tap/click target is a paste zone
-            function _isPasteZone(target) {
+            // In cut mode, prevent any non-paste input from gaining focus
+            document.addEventListener(
+                "focusin",
+                function (e) {
+                    if (!_cutItem) return;
+                    var el = e.target;
+                    if (el.classList.contains("paste-zone")) return;
+                    if (el.hasAttribute("data-paste-zone")) return;
+                    el.blur();
+                },
+                true,
+            );
+
+            // Detect if tap/click target is a paste zone or cut-mode interactive element
+            function _isPasteOrCutZone(target) {
                 if (target.closest(".paste-zone")) return true;
                 if (target.closest("[data-paste-zone]")) return true;
+                if (target.id === "sidebar-bl-input" && target.readOnly)
+                    return true;
+                if (
+                    target.closest(".task-item") &&
+                    target.closest(".task-item").style.background
+                )
+                    return true;
+                if (
+                    target.closest(".backlog-item") &&
+                    target.closest(".backlog-item").style.borderColor
+                )
+                    return true;
                 return false;
             }
 
@@ -3936,13 +3973,13 @@
                 "click",
                 function (e) {
                     if (!_cutItem) return;
-                    if (_isPasteZone(e.target)) return;
+                    if (_isPasteOrCutZone(e.target)) return;
                     cancelCut();
                 },
                 true,
             );
 
-            // Cancel cut on touchend for iOS PWA — immediate, no delay
+            // Cancel cut on touchend for iOS PWA where click events on empty space are unreliable
             var _cutTouchMoved = false;
             document.addEventListener(
                 "touchstart",
@@ -3958,12 +3995,17 @@
                 },
                 { passive: true },
             );
-            document.addEventListener("touchend", function (e) {
-                if (!_cutItem || _cutTouchMoved) return;
-                if (_isPasteZone(e.target)) return;
-                e.preventDefault();
-                cancelCut();
-            });
+            document.addEventListener(
+                "touchend",
+                function (e) {
+                    if (!_cutItem || _cutTouchMoved) return;
+                    var target = e.target;
+                    if (_isPasteOrCutZone(target)) return;
+                    // Cancel cut immediately on tap outside paste zone
+                    cancelCut();
+                },
+                { passive: true },
+            );
             function pasteToDay(ds) {
                 if (!_cutItem) return;
                 if (new Date(ds).getDay() === 0 || isDayOff(ds)) {
@@ -4482,117 +4524,7 @@
                 if ((S.icsFeeds || []).length > 0) fetchAllIcsFeeds();
             }, 300000);
 
-            // ── iOS keyboard scroll fix ───────────────────────────
-            // Technique: when input is focused, fix the body in place so Safari
-            // cannot scroll it. Then measure keyboard and, if needed, translate
-            // the body up just enough so the input + its parent row are visible.
-            (function () {
-                if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
-
-                var _active = null;
-                var _scrollY = 0;
-                var _fixed = false;
-
-                function lockBody() {
-                    if (_fixed) return;
-                    _scrollY = window.scrollY;
-                    _fixed = true;
-                    document.body.style.position = "fixed";
-                    document.body.style.top = -_scrollY + "px";
-                    document.body.style.left = "0";
-                    document.body.style.right = "0";
-                    document.body.style.overflow = "hidden";
-                }
-
-                function unlockBody() {
-                    if (!_fixed) return;
-                    _fixed = false;
-                    document.body.style.position = "";
-                    document.body.style.top = "";
-                    document.body.style.left = "";
-                    document.body.style.right = "";
-                    document.body.style.overflow = "";
-                    window.scrollTo(0, _scrollY);
-                }
-
-                function adjust() {
-                    if (!_active || document.activeElement !== _active) return;
-                    var vv = window.visualViewport;
-                    if (!vv) return;
-                    var kbH = window.innerHeight - vv.height;
-                    if (kbH < 100) {
-                        // No keyboard — just lock in place, no shift needed
-                        document.body.style.top = -_scrollY + "px";
-                        return;
-                    }
-
-                    // Find the element we need visible: the input's parent row
-                    // (includes the "Dodaj" button below)
-                    var container = _active.closest(".day-add-row");
-                    var timeRow = container
-                        ? container.nextElementSibling
-                        : null;
-                    var showEl = _active;
-
-                    // If there's a visible time-inputs row with "Dodaj", include it
-                    if (timeRow && timeRow.classList.contains("show")) {
-                        showEl = timeRow;
-                    }
-
-                    // Get bottom of what needs to be visible (relative to document)
-                    var rect = showEl.getBoundingClientRect();
-                    // rect is relative to viewport, but body is fixed at top=-_scrollY
-                    // so element's page position = rect.bottom + _scrollY + currentShift
-                    var currentShift = parseFloat(document.body.style.top) || 0;
-                    var elPageBottom = rect.bottom - currentShift;
-
-                    // Available visible height above keyboard
-                    var visibleH = window.innerHeight - kbH;
-
-                    // If element bottom is below the visible area
-                    if (elPageBottom > _scrollY + visibleH) {
-                        var needed = elPageBottom - visibleH;
-                        // Add 10px breathing room
-                        document.body.style.top = -(needed + 10) + "px";
-                    }
-                }
-
-                document.addEventListener("focusin", function (e) {
-                    var el = e.target;
-                    if (
-                        !el ||
-                        !(
-                            el.tagName === "INPUT" ||
-                            el.tagName === "TEXTAREA" ||
-                            el.tagName === "SELECT"
-                        )
-                    )
-                        return;
-                    if (el.readOnly) return;
-                    _active = el;
-                    lockBody();
-                    // Adjust after keyboard appears
-                    setTimeout(adjust, 350);
-                    setTimeout(adjust, 500);
-                });
-
-                document.addEventListener("focusout", function () {
-                    _active = null;
-                    // Small delay — focusout fires before focusin when switching inputs
-                    setTimeout(function () {
-                        if (!_active) unlockBody();
-                    }, 100);
-                });
-
-                if (window.visualViewport) {
-                    window.visualViewport.addEventListener(
-                        "resize",
-                        function () {
-                            if (_active) setTimeout(adjust, 50);
-                        },
-                    );
-                }
-            })();
+            // (scroll fix removed — iOS standalone handles focus natively)
         </script>
     </body>
 </html>
