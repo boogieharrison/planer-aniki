@@ -1748,7 +1748,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.61 · 20.03.2026, 00:57
+                    Planer Aniki v0.62 · 20.03.2026, 01:10
                 </div>
             </div>
         </div>
@@ -3906,22 +3906,10 @@
                 window.scrollTo(0, scrollY);
             }
 
-            // Detect if tap/click target is a paste zone or cut-mode interactive element
-            function _isPasteOrCutZone(target) {
+            // Detect if tap/click target is a paste zone
+            function _isPasteZone(target) {
                 if (target.closest(".paste-zone")) return true;
                 if (target.closest("[data-paste-zone]")) return true;
-                if (target.id === "sidebar-bl-input" && target.readOnly)
-                    return true;
-                if (
-                    target.closest(".task-item") &&
-                    target.closest(".task-item").style.background
-                )
-                    return true;
-                if (
-                    target.closest(".backlog-item") &&
-                    target.closest(".backlog-item").style.borderColor
-                )
-                    return true;
                 return false;
             }
 
@@ -3930,13 +3918,13 @@
                 "click",
                 function (e) {
                     if (!_cutItem) return;
-                    if (_isPasteOrCutZone(e.target)) return;
+                    if (_isPasteZone(e.target)) return;
                     cancelCut();
                 },
                 true,
             );
 
-            // Cancel cut on touchend for iOS PWA where click events on empty space are unreliable
+            // Cancel cut on touchend for iOS PWA — immediate, no delay
             var _cutTouchMoved = false;
             document.addEventListener(
                 "touchstart",
@@ -3952,19 +3940,12 @@
                 },
                 { passive: true },
             );
-            document.addEventListener(
-                "touchend",
-                function (e) {
-                    if (!_cutItem || _cutTouchMoved) return;
-                    var target = e.target;
-                    if (_isPasteOrCutZone(target)) return;
-                    // Small delay so paste onclick can fire first if target was a paste zone
-                    setTimeout(function () {
-                        if (_cutItem) cancelCut();
-                    }, 150);
-                },
-                { passive: true },
-            );
+            document.addEventListener("touchend", function (e) {
+                if (!_cutItem || _cutTouchMoved) return;
+                if (_isPasteZone(e.target)) return;
+                e.preventDefault();
+                cancelCut();
+            });
             function pasteToDay(ds) {
                 if (!_cutItem) return;
                 if (new Date(ds).getDay() === 0 || isDayOff(ds)) {
@@ -4483,7 +4464,88 @@
                 if ((S.icsFeeds || []).length > 0) fetchAllIcsFeeds();
             }, 300000);
 
-            // (scroll fix removed — iOS standalone handles focus natively)
+            // ── iOS keyboard scroll fix ───────────────────────────
+            // Prevent aggressive auto-scroll on focus. Only scroll if the input
+            // would be covered by the keyboard, and scroll just enough.
+            (function () {
+                var _focusScrollY = 0;
+                var _focusEl = null;
+
+                // Capture scroll position BEFORE focus changes anything
+                document.addEventListener("focusin", function (e) {
+                    var el = e.target;
+                    if (
+                        !el ||
+                        !(
+                            el.tagName === "INPUT" ||
+                            el.tagName === "TEXTAREA" ||
+                            el.tagName === "SELECT"
+                        )
+                    )
+                        return;
+                    _focusEl = el;
+                    _focusScrollY = window.scrollY;
+                    // Immediately restore scroll — browser may have already jumped
+                    requestAnimationFrame(function () {
+                        window.scrollTo(0, _focusScrollY);
+                    });
+                });
+
+                // After keyboard appears, check if input is actually obscured
+                // and scroll minimally if needed
+                function adjustForKeyboard() {
+                    if (
+                        !_focusEl ||
+                        !document.activeElement ||
+                        _focusEl !== document.activeElement
+                    )
+                        return;
+                    var vv = window.visualViewport;
+                    var visibleBottom = vv
+                        ? vv.offsetTop + vv.height
+                        : window.innerHeight;
+                    var rect = _focusEl.getBoundingClientRect();
+                    var inputBottom = rect.bottom + 16; // 16px breathing room
+                    if (inputBottom > visibleBottom) {
+                        // Scroll just enough to reveal the input
+                        var diff = inputBottom - visibleBottom;
+                        window.scrollTo(0, _focusScrollY + diff);
+                    } else {
+                        // Input is visible — keep original position
+                        window.scrollTo(0, _focusScrollY);
+                    }
+                }
+
+                // visualViewport resize fires when keyboard appears/disappears
+                if (window.visualViewport) {
+                    window.visualViewport.addEventListener(
+                        "resize",
+                        function () {
+                            setTimeout(adjustForKeyboard, 80);
+                        },
+                    );
+                }
+                // Fallback: also try after a delay on focus
+                document.addEventListener("focusin", function (e) {
+                    var el = e.target;
+                    if (
+                        !el ||
+                        !(
+                            el.tagName === "INPUT" ||
+                            el.tagName === "TEXTAREA" ||
+                            el.tagName === "SELECT"
+                        )
+                    )
+                        return;
+                    setTimeout(adjustForKeyboard, 300);
+                    setTimeout(adjustForKeyboard, 600);
+                });
+
+                // When keyboard hides, restore scroll
+                document.addEventListener("focusout", function () {
+                    _focusEl = null;
+                });
+            })();
         </script>
     </body>
 </html>
