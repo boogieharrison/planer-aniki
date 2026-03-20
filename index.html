@@ -1748,7 +1748,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.63 · 20.03.2026, 01:28
+                    Planer Aniki v0.64 · 20.03.2026, 01:40
                 </div>
             </div>
         </div>
@@ -2323,6 +2323,22 @@
                 }
             }
             function onDayInput(e, ds) {}
+            function onDayInputBlur(ds) {
+                // Delay to allow click on "Dodaj" or time input to register first
+                setTimeout(function () {
+                    var inp = document.getElementById("qi-" + ds);
+                    if (!inp) return;
+                    // If input is empty and focus moved away from this day's controls
+                    if (inp.value.trim() === "") {
+                        var active = document.activeElement;
+                        var timeWrap = document.getElementById("qt-wrap-" + ds);
+                        // Don't cancel if focus moved to time input or Dodaj button within same day
+                        if (active && timeWrap && timeWrap.contains(active))
+                            return;
+                        cancelDayInput(ds);
+                    }
+                }, 150);
+            }
             function cancelDayInput(ds) {
                 var inp = document.getElementById("qi-" + ds);
                 var wrap = document.getElementById("qt-wrap-" + ds);
@@ -2873,6 +2889,8 @@
                             '<input class="day-quick-input" id="qi-' +
                             ds +
                             '" placeholder="+ dodaj zadanie..." onfocus="showDayTimeInputs(\'' +
+                            ds +
+                            "')\" onblur=\"onDayInputBlur('" +
                             ds +
                             "')\" onkeydown=\"onDayKeydown(event,'" +
                             ds +
@@ -4465,25 +4483,80 @@
             }, 300000);
 
             // ── iOS keyboard scroll fix ───────────────────────────
-            // On iOS Safari/PWA, focusing an input causes aggressive auto-scroll.
-            // Strategy: lock scroll on focus, then after keyboard is up, check if
-            // the input is hidden and smooth-scroll only the minimum amount needed.
+            // Technique: when input is focused, fix the body in place so Safari
+            // cannot scroll it. Then measure keyboard and, if needed, translate
+            // the body up just enough so the input + its parent row are visible.
             (function () {
                 if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
 
-                var _savedY = 0;
-                var _activeInput = null;
-                var _kbVisible = false;
-                var _layoutH = window.innerHeight; // full layout height without keyboard
+                var _active = null;
+                var _scrollY = 0;
+                var _fixed = false;
 
-                // Track layout height when keyboard is hidden
-                function updateLayoutH() {
-                    if (!_kbVisible) _layoutH = window.innerHeight;
+                function lockBody() {
+                    if (_fixed) return;
+                    _scrollY = window.scrollY;
+                    _fixed = true;
+                    document.body.style.position = "fixed";
+                    document.body.style.top = -_scrollY + "px";
+                    document.body.style.left = "0";
+                    document.body.style.right = "0";
+                    document.body.style.overflow = "hidden";
                 }
-                window.addEventListener("resize", updateLayoutH);
 
-                // On focus: save scroll, then keep fighting Safari's auto-scroll
-                // until we can measure the keyboard and decide properly
+                function unlockBody() {
+                    if (!_fixed) return;
+                    _fixed = false;
+                    document.body.style.position = "";
+                    document.body.style.top = "";
+                    document.body.style.left = "";
+                    document.body.style.right = "";
+                    document.body.style.overflow = "";
+                    window.scrollTo(0, _scrollY);
+                }
+
+                function adjust() {
+                    if (!_active || document.activeElement !== _active) return;
+                    var vv = window.visualViewport;
+                    if (!vv) return;
+                    var kbH = window.innerHeight - vv.height;
+                    if (kbH < 100) {
+                        // No keyboard — just lock in place, no shift needed
+                        document.body.style.top = -_scrollY + "px";
+                        return;
+                    }
+
+                    // Find the element we need visible: the input's parent row
+                    // (includes the "Dodaj" button below)
+                    var container = _active.closest(".day-add-row");
+                    var timeRow = container
+                        ? container.nextElementSibling
+                        : null;
+                    var showEl = _active;
+
+                    // If there's a visible time-inputs row with "Dodaj", include it
+                    if (timeRow && timeRow.classList.contains("show")) {
+                        showEl = timeRow;
+                    }
+
+                    // Get bottom of what needs to be visible (relative to document)
+                    var rect = showEl.getBoundingClientRect();
+                    // rect is relative to viewport, but body is fixed at top=-_scrollY
+                    // so element's page position = rect.bottom + _scrollY + currentShift
+                    var currentShift = parseFloat(document.body.style.top) || 0;
+                    var elPageBottom = rect.bottom - currentShift;
+
+                    // Available visible height above keyboard
+                    var visibleH = window.innerHeight - kbH;
+
+                    // If element bottom is below the visible area
+                    if (elPageBottom > _scrollY + visibleH) {
+                        var needed = elPageBottom - visibleH;
+                        // Add 10px breathing room
+                        document.body.style.top = -(needed + 10) + "px";
+                    }
+                }
+
                 document.addEventListener("focusin", function (e) {
                     var el = e.target;
                     if (
@@ -4496,98 +4569,29 @@
                     )
                         return;
                     if (el.readOnly) return;
-                    _activeInput = el;
-                    _savedY = window.scrollY;
-
-                    // Fight Safari's scroll jumps for 400ms (keyboard animation duration)
-                    var fightUntil = Date.now() + 400;
-                    var raf;
-                    function holdScroll() {
-                        if (Date.now() < fightUntil && _activeInput === el) {
-                            window.scrollTo(0, _savedY);
-                            raf = requestAnimationFrame(holdScroll);
-                        }
-                    }
-                    raf = requestAnimationFrame(holdScroll);
-
-                    // After keyboard is fully up, do the real adjustment
-                    setTimeout(function () {
-                        cancelAnimationFrame(raf);
-                        if (
-                            _activeInput !== el ||
-                            document.activeElement !== el
-                        )
-                            return;
-                        doAdjust(el);
-                    }, 450);
+                    _active = el;
+                    lockBody();
+                    // Adjust after keyboard appears
+                    setTimeout(adjust, 350);
+                    setTimeout(adjust, 500);
                 });
 
-                function doAdjust(el) {
-                    // Estimate keyboard height: difference between full layout and current visual viewport
-                    var vv = window.visualViewport;
-                    var kbH = 0;
-                    if (vv) {
-                        kbH = _layoutH - vv.height;
-                        _kbVisible = kbH > 100;
-                    } else {
-                        // Fallback: iPhone 11 keyboard is ~300px
-                        kbH = 300;
-                        _kbVisible = true;
-                    }
-                    if (kbH < 100) {
-                        // Keyboard probably not showing — restore original position
-                        window.scrollTo(0, _savedY);
-                        return;
-                    }
+                document.addEventListener("focusout", function () {
+                    _active = null;
+                    // Small delay — focusout fires before focusin when switching inputs
+                    setTimeout(function () {
+                        if (!_active) unlockBody();
+                    }, 100);
+                });
 
-                    // Where is the input relative to the page?
-                    var rect = el.getBoundingClientRect();
-                    var inputPageBottom = window.scrollY + rect.bottom;
-                    var inputPageTop = window.scrollY + rect.top;
-
-                    // Visible area: from current scroll to (scroll + screen - keyboard)
-                    var visibleH = _layoutH - kbH;
-                    var visibleTop = _savedY;
-                    var visibleBottom = _savedY + visibleH;
-
-                    if (inputPageBottom + 20 > visibleBottom) {
-                        // Input is below keyboard — scroll just enough
-                        var target = inputPageBottom + 20 - visibleH;
-                        // Don't scroll more than needed
-                        window.scrollTo({ top: target, behavior: "smooth" });
-                    } else if (inputPageTop < visibleTop) {
-                        // Input is above visible area (unlikely but handle)
-                        window.scrollTo({
-                            top: inputPageTop - 20,
-                            behavior: "smooth",
-                        });
-                    } else {
-                        // Input is visible — restore original scroll
-                        window.scrollTo(0, _savedY);
-                    }
-                }
-
-                // Also re-adjust if visualViewport changes (keyboard resize/rotate)
                 if (window.visualViewport) {
                     window.visualViewport.addEventListener(
                         "resize",
                         function () {
-                            if (
-                                _activeInput &&
-                                document.activeElement === _activeInput
-                            ) {
-                                setTimeout(function () {
-                                    doAdjust(_activeInput);
-                                }, 100);
-                            }
+                            if (_active) setTimeout(adjust, 50);
                         },
                     );
                 }
-
-                document.addEventListener("focusout", function () {
-                    _activeInput = null;
-                    _kbVisible = false;
-                });
             })();
         </script>
     </body>
