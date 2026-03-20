@@ -1748,7 +1748,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.62 · 20.03.2026, 01:10
+                    Planer Aniki v0.63 · 20.03.2026, 01:28
                 </div>
             </div>
         </div>
@@ -4465,13 +4465,25 @@
             }, 300000);
 
             // ── iOS keyboard scroll fix ───────────────────────────
-            // Prevent aggressive auto-scroll on focus. Only scroll if the input
-            // would be covered by the keyboard, and scroll just enough.
+            // On iOS Safari/PWA, focusing an input causes aggressive auto-scroll.
+            // Strategy: lock scroll on focus, then after keyboard is up, check if
+            // the input is hidden and smooth-scroll only the minimum amount needed.
             (function () {
-                var _focusScrollY = 0;
-                var _focusEl = null;
+                if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
 
-                // Capture scroll position BEFORE focus changes anything
+                var _savedY = 0;
+                var _activeInput = null;
+                var _kbVisible = false;
+                var _layoutH = window.innerHeight; // full layout height without keyboard
+
+                // Track layout height when keyboard is hidden
+                function updateLayoutH() {
+                    if (!_kbVisible) _layoutH = window.innerHeight;
+                }
+                window.addEventListener("resize", updateLayoutH);
+
+                // On focus: save scroll, then keep fighting Safari's auto-scroll
+                // until we can measure the keyboard and decide properly
                 document.addEventListener("focusin", function (e) {
                     var el = e.target;
                     if (
@@ -4483,67 +4495,98 @@
                         )
                     )
                         return;
-                    _focusEl = el;
-                    _focusScrollY = window.scrollY;
-                    // Immediately restore scroll — browser may have already jumped
-                    requestAnimationFrame(function () {
-                        window.scrollTo(0, _focusScrollY);
-                    });
+                    if (el.readOnly) return;
+                    _activeInput = el;
+                    _savedY = window.scrollY;
+
+                    // Fight Safari's scroll jumps for 400ms (keyboard animation duration)
+                    var fightUntil = Date.now() + 400;
+                    var raf;
+                    function holdScroll() {
+                        if (Date.now() < fightUntil && _activeInput === el) {
+                            window.scrollTo(0, _savedY);
+                            raf = requestAnimationFrame(holdScroll);
+                        }
+                    }
+                    raf = requestAnimationFrame(holdScroll);
+
+                    // After keyboard is fully up, do the real adjustment
+                    setTimeout(function () {
+                        cancelAnimationFrame(raf);
+                        if (
+                            _activeInput !== el ||
+                            document.activeElement !== el
+                        )
+                            return;
+                        doAdjust(el);
+                    }, 450);
                 });
 
-                // After keyboard appears, check if input is actually obscured
-                // and scroll minimally if needed
-                function adjustForKeyboard() {
-                    if (
-                        !_focusEl ||
-                        !document.activeElement ||
-                        _focusEl !== document.activeElement
-                    )
-                        return;
+                function doAdjust(el) {
+                    // Estimate keyboard height: difference between full layout and current visual viewport
                     var vv = window.visualViewport;
-                    var visibleBottom = vv
-                        ? vv.offsetTop + vv.height
-                        : window.innerHeight;
-                    var rect = _focusEl.getBoundingClientRect();
-                    var inputBottom = rect.bottom + 16; // 16px breathing room
-                    if (inputBottom > visibleBottom) {
-                        // Scroll just enough to reveal the input
-                        var diff = inputBottom - visibleBottom;
-                        window.scrollTo(0, _focusScrollY + diff);
+                    var kbH = 0;
+                    if (vv) {
+                        kbH = _layoutH - vv.height;
+                        _kbVisible = kbH > 100;
                     } else {
-                        // Input is visible — keep original position
-                        window.scrollTo(0, _focusScrollY);
+                        // Fallback: iPhone 11 keyboard is ~300px
+                        kbH = 300;
+                        _kbVisible = true;
+                    }
+                    if (kbH < 100) {
+                        // Keyboard probably not showing — restore original position
+                        window.scrollTo(0, _savedY);
+                        return;
+                    }
+
+                    // Where is the input relative to the page?
+                    var rect = el.getBoundingClientRect();
+                    var inputPageBottom = window.scrollY + rect.bottom;
+                    var inputPageTop = window.scrollY + rect.top;
+
+                    // Visible area: from current scroll to (scroll + screen - keyboard)
+                    var visibleH = _layoutH - kbH;
+                    var visibleTop = _savedY;
+                    var visibleBottom = _savedY + visibleH;
+
+                    if (inputPageBottom + 20 > visibleBottom) {
+                        // Input is below keyboard — scroll just enough
+                        var target = inputPageBottom + 20 - visibleH;
+                        // Don't scroll more than needed
+                        window.scrollTo({ top: target, behavior: "smooth" });
+                    } else if (inputPageTop < visibleTop) {
+                        // Input is above visible area (unlikely but handle)
+                        window.scrollTo({
+                            top: inputPageTop - 20,
+                            behavior: "smooth",
+                        });
+                    } else {
+                        // Input is visible — restore original scroll
+                        window.scrollTo(0, _savedY);
                     }
                 }
 
-                // visualViewport resize fires when keyboard appears/disappears
+                // Also re-adjust if visualViewport changes (keyboard resize/rotate)
                 if (window.visualViewport) {
                     window.visualViewport.addEventListener(
                         "resize",
                         function () {
-                            setTimeout(adjustForKeyboard, 80);
+                            if (
+                                _activeInput &&
+                                document.activeElement === _activeInput
+                            ) {
+                                setTimeout(function () {
+                                    doAdjust(_activeInput);
+                                }, 100);
+                            }
                         },
                     );
                 }
-                // Fallback: also try after a delay on focus
-                document.addEventListener("focusin", function (e) {
-                    var el = e.target;
-                    if (
-                        !el ||
-                        !(
-                            el.tagName === "INPUT" ||
-                            el.tagName === "TEXTAREA" ||
-                            el.tagName === "SELECT"
-                        )
-                    )
-                        return;
-                    setTimeout(adjustForKeyboard, 300);
-                    setTimeout(adjustForKeyboard, 600);
-                });
 
-                // When keyboard hides, restore scroll
                 document.addEventListener("focusout", function () {
-                    _focusEl = null;
+                    _activeInput = null;
+                    _kbVisible = false;
                 });
             })();
         </script>
