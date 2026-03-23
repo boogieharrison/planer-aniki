@@ -603,24 +603,30 @@
             .day-quick-input::placeholder {
                 color: var(--ink3);
             }
-            .day-time-inputs {
+            .day-inline-time {
                 display: none;
-                gap: 0.4rem;
-                align-items: center;
-                margin-top: 0.3rem;
-                flex-wrap: wrap;
+                width: 70px;
+                padding: 0.2rem 0.3rem;
+                font-size: 0.75rem;
+                font-family: "Syne", sans-serif;
+                border: 1px solid var(--line2);
+                border-radius: var(--r-sm);
+                background: var(--bg);
+                color: var(--ink);
+                flex-shrink: 0;
+                -webkit-appearance: none;
             }
-            .day-time-inputs.show {
-                display: flex;
+            .day-inline-time:focus {
+                border-color: var(--ink);
+                outline: none;
             }
-            .day-time-inputs input {
-                padding: 0.25rem 0.4rem;
-                font-size: 0.8rem;
+            .day-inline-time.show {
+                display: block;
             }
             .day-add-confirm {
                 padding: 0.25rem 0.6rem;
                 font-size: 0.75rem;
-                margin-left: auto;
+                flex-shrink: 0;
             }
             .day-cancel-btn {
                 background: transparent;
@@ -692,6 +698,18 @@
                 .day-quick-input {
                     font-size: 0.78rem;
                     padding: 0.25rem 0.35rem;
+                }
+                .day-inline-time {
+                    width: 58px;
+                    font-size: 0.7rem;
+                    padding: 0.15rem 0.2rem;
+                }
+                .day-add-row {
+                    gap: 0.25rem;
+                }
+                .day-add-confirm {
+                    padding: 0.2rem 0.45rem;
+                    font-size: 0.7rem;
                 }
             }
 
@@ -1806,7 +1824,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.68 · 23.03.2026, 23:44
+                    Planer Aniki v0.67 · 23.03.2026, 18:27
                 </div>
             </div>
         </div>
@@ -2356,8 +2374,10 @@
             }
 
             function showDayTimeInputs(ds) {
-                var wrap = document.getElementById("qt-wrap-" + ds);
-                if (wrap) wrap.classList.add("show");
+                var timeInp = document.getElementById("qf-" + ds);
+                if (timeInp) timeInp.classList.add("show");
+                var addBtn = document.getElementById("qa-" + ds);
+                if (addBtn) addBtn.style.display = "block";
                 var xBtn = document.getElementById("qx-" + ds);
                 if (xBtn) xBtn.style.display = "block";
                 var inp = document.getElementById("qi-" + ds);
@@ -2366,11 +2386,9 @@
 
             function onDayKeydown(e, ds) {
                 if (e.key === "Enter") {
-                    var wrap = document.getElementById("qt-wrap-" + ds);
-                    if (!wrap || !wrap.classList.contains("show")) {
-                        if (wrap) wrap.classList.add("show");
-                        var xBtn = document.getElementById("qx-" + ds);
-                        if (xBtn) xBtn.style.display = "block";
+                    var timeInp = document.getElementById("qf-" + ds);
+                    if (!timeInp || !timeInp.classList.contains("show")) {
+                        showDayTimeInputs(ds);
                     } else {
                         addTaskForDay(ds);
                     }
@@ -2387,10 +2405,7 @@
             function onDayInputBlur(ds) {
                 setTimeout(function () {
                     var active = document.activeElement;
-                    // Don't cancel if focus moved to time input or confirm button in same day
-                    var wrap = document.getElementById("qt-wrap-" + ds);
                     var dar = document.getElementById("dar-" + ds);
-                    if (wrap && wrap.contains(active)) return;
                     if (dar && dar.contains(active)) return;
                     var inp = document.getElementById("qi-" + ds);
                     var timeInp = document.getElementById("qf-" + ds);
@@ -2403,21 +2418,24 @@
             }
             function cancelDayInput(ds) {
                 var inp = document.getElementById("qi-" + ds);
-                var wrap = document.getElementById("qt-wrap-" + ds);
+                var timeInp = document.getElementById("qf-" + ds);
                 var xBtn = document.getElementById("qx-" + ds);
+                var addBtn = document.getElementById("qa-" + ds);
                 if (inp) {
                     inp.value = "";
                     inp.blur();
                 }
-                if (wrap) wrap.classList.remove("show");
+                if (timeInp) {
+                    timeInp.value = "";
+                    timeInp.classList.remove("show");
+                }
                 if (xBtn) xBtn.style.display = "none";
+                if (addBtn) addBtn.style.display = "none";
             }
             function onDayTimeBlur(ds) {
                 setTimeout(function () {
                     var active = document.activeElement;
-                    var wrap = document.getElementById("qt-wrap-" + ds);
                     var dar = document.getElementById("dar-" + ds);
-                    if (wrap && wrap.contains(active)) return;
                     if (dar && dar.contains(active)) return;
                     var inp = document.getElementById("qi-" + ds);
                     var timeInp = document.getElementById("qf-" + ds);
@@ -2971,6 +2989,12 @@
                             '\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
                     } else {
                         rowHtml +=
+                            '<input type="time" class="day-inline-time" id="qf-' +
+                            ds +
+                            '" value="" onblur="onDayTimeBlur(\'' +
+                            ds +
+                            '\')">';
+                        rowHtml +=
                             '<input class="day-quick-input" id="qi-' +
                             ds +
                             '" placeholder="+ dodaj zadanie..." onfocus="showDayTimeInputs(\'' +
@@ -2989,17 +3013,10 @@
                         '" style="display:none" onclick="cancelDayInput(\'' +
                         ds +
                         "')\">✕</button>";
-                    rowHtml += "</div>";
                     rowHtml +=
-                        '<div class="day-time-inputs" id="qt-wrap-' + ds + '">';
-                    rowHtml +=
-                        '<input type="time" id="qf-' +
+                        '<button class="btn btn-sm btn-sage day-add-confirm" id="qa-' +
                         ds +
-                        '" value="" min="08:00" max="22:00" style="width:80px" onblur="onDayTimeBlur(\'' +
-                        ds +
-                        "')\">";
-                    rowHtml +=
-                        '<button class="btn btn-sm btn-sage day-add-confirm" onclick="addTaskForDay(\'' +
+                        '" style="display:none" onclick="addTaskForDay(\'' +
                         ds +
                         "')\" >Dodaj</button>";
                     rowHtml += "</div>";
