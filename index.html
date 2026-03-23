@@ -1680,6 +1680,17 @@
                             >
                                 ↺ Przywróć odhaczone
                             </button>
+                            <button
+                                class="btn btn-sm"
+                                onclick="resetIcsHidden()"
+                                style="
+                                    font-size: 0.7rem;
+                                    color: var(--red);
+                                    border-color: var(--red);
+                                "
+                            >
+                                ↺ Przywróć ukryte
+                            </button>
                         </div>
                     </div>
                 </details>
@@ -1770,7 +1781,7 @@
                         letter-spacing: 0.04em;
                     "
                 >
-                    Planer Aniki v0.66 · 23.03.2026, 17:33
+                    Planer Aniki v0.66 · 23.03.2026, 18:27
                 </div>
             </div>
         </div>
@@ -1988,6 +1999,7 @@
                                     icsFeeds: [],
                                     daysOff: [],
                                     icsCompleted: [],
+                                    icsHidden: [],
                                     calY: new Date().getFullYear(),
                                     calM: new Date().getMonth(),
                                 },
@@ -2047,6 +2059,7 @@
                                         icsFeeds: [],
                                         daysOff: [],
                                         icsCompleted: [],
+                                        icsHidden: [],
                                         calY: new Date().getFullYear(),
                                         calM: new Date().getMonth(),
                                     },
@@ -2109,6 +2122,7 @@
                                 icsFeeds: [],
                                 daysOff: [],
                                 icsCompleted: [],
+                                icsHidden: [],
                                 calY: new Date().getFullYear(),
                                 calM: new Date().getMonth(),
                             },
@@ -2144,6 +2158,7 @@
                 icsFeeds: [],
                 daysOff: [],
                 icsCompleted: [],
+                icsHidden: [],
                 calY: new Date().getFullYear(),
                 calM: new Date().getMonth(),
             };
@@ -2200,6 +2215,7 @@
                                 icsFeeds: [],
                                 daysOff: [],
                                 icsCompleted: [],
+                                icsHidden: [],
                                 calY: new Date().getFullYear(),
                                 calM: new Date().getMonth(),
                             },
@@ -2811,11 +2827,15 @@
                                 e.summary +
                                 "|" +
                                 (e.timeFrom || "");
+                            // Persistent hide key (date-independent — hides event across all dates)
+                            var icsHideKey = e.summary + "|" + (e.feedId || "");
                             var icsId =
                                 "ics-" + icsKey.replace(/[^a-zA-Z0-9]/g, "_");
                             var icsDone =
                                 (S.icsCompleted || []).indexOf(icsKey) !== -1;
-                            if (!icsDone) {
+                            var icsHidden =
+                                (S.icsHidden || []).indexOf(icsHideKey) !== -1;
+                            if (!icsDone && !icsHidden) {
                                 itemsHtml +=
                                     '<div class="task-item" id="' +
                                     icsId +
@@ -2838,6 +2858,10 @@
                                     '" readonly style="color:' +
                                     e.color +
                                     ';background:transparent">';
+                                itemsHtml +=
+                                    '<button class="task-del" onclick="hideIcsEvent(\'' +
+                                    icsHideKey.replace(/'/g, "\\'") +
+                                    "')\">✕</button>";
                                 itemsHtml += "</div>";
                             }
                         }
@@ -2957,6 +2981,7 @@
                         tasks: S.tasks,
                         backlog: S.backlog,
                         icsCompleted: S.icsCompleted || [],
+                        icsHidden: S.icsHidden || [],
                     }),
                 );
                 if (_undoStack.length > _maxUndo) _undoStack.shift();
@@ -2970,12 +2995,14 @@
                         tasks: S.tasks,
                         backlog: S.backlog,
                         icsCompleted: S.icsCompleted || [],
+                        icsHidden: S.icsHidden || [],
                     }),
                 );
                 var prev = JSON.parse(_undoStack.pop());
                 S.tasks = prev.tasks;
                 S.backlog = prev.backlog;
                 S.icsCompleted = prev.icsCompleted || [];
+                S.icsHidden = prev.icsHidden || [];
                 save();
                 renderTasks();
                 renderSidebarBacklog();
@@ -2988,12 +3015,14 @@
                         tasks: S.tasks,
                         backlog: S.backlog,
                         icsCompleted: S.icsCompleted || [],
+                        icsHidden: S.icsHidden || [],
                     }),
                 );
                 var next = JSON.parse(_redoStack.pop());
                 S.tasks = next.tasks;
                 S.backlog = next.backlog;
                 S.icsCompleted = next.icsCompleted || [];
+                S.icsHidden = next.icsHidden || [];
                 save();
                 renderTasks();
                 renderSidebarBacklog();
@@ -3083,6 +3112,26 @@
                     return;
                 pushUndo();
                 S.icsCompleted = [];
+                save();
+                renderTasks();
+            }
+            function hideIcsEvent(hideKey) {
+                if (!S.icsHidden) S.icsHidden = [];
+                pushUndo();
+                if (S.icsHidden.indexOf(hideKey) === -1)
+                    S.icsHidden.push(hideKey);
+                save();
+                renderTasks();
+            }
+            function resetIcsHidden() {
+                if (
+                    !confirm(
+                        "Przywrócić wszystkie ukryte zdarzenia z kalendarza?",
+                    )
+                )
+                    return;
+                pushUndo();
+                S.icsHidden = [];
                 save();
                 renderTasks();
             }
@@ -4070,8 +4119,11 @@
                 return events;
             }
             function getIcsEventsForDate(ds) {
+                var hidden = S.icsHidden || [];
                 return icsEvents.filter(function (e) {
-                    return e.date === ds;
+                    if (e.date !== ds) return false;
+                    var hideKey = e.summary + "|" + (e.feedId || "");
+                    return hidden.indexOf(hideKey) === -1;
                 });
             }
             function updateCalLegend() {
