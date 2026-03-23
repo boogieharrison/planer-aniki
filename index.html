@@ -401,14 +401,15 @@
                 background: none;
                 border: none;
                 padding: 0.1rem 0;
-                font-family: "Syne", sans-serif;
-                font-size: 0.68rem;
+                font-family: "SF Mono", "Menlo", "Consolas", monospace;
+                font-size: 0.65rem;
                 font-weight: 600;
                 color: var(--ink);
                 cursor: pointer;
                 flex-shrink: 0;
-                width: 28px;
+                width: 34px;
                 text-align: center;
+                letter-spacing: -0.02em;
             }
             .task-time-btn.has-time {
                 color: var(--ink);
@@ -423,9 +424,9 @@
             .task-time-input {
                 width: 52px;
                 padding: 0;
-                font-size: 0.7rem;
+                font-size: 0.65rem;
                 font-weight: 600;
-                font-family: "Syne", sans-serif;
+                font-family: "SF Mono", "Menlo", "Consolas", monospace;
                 border: none;
                 border-bottom: 1px solid var(--blue);
                 border-radius: 0;
@@ -578,17 +579,24 @@
             .day-add-row {
                 display: flex;
                 align-items: center;
-                gap: 0.25rem;
+                gap: 0.2rem;
+                padding: 0.2rem 0.1rem;
+            }
+            .day-add-spacer {
+                width: 18px;
+                flex-shrink: 0;
+                margin-left: -0.2rem;
+                margin-right: 0.1rem;
             }
             .day-quick-input {
                 flex: 1;
-                padding: 0.3rem 0.5rem;
-                border: 1px solid transparent;
+                padding: 0.25rem 0.4rem;
+                border: 1px solid var(--line);
                 border-radius: var(--r-sm);
                 background: transparent;
                 color: var(--ink);
                 font-family: "Syne", sans-serif;
-                font-size: 0.875rem;
+                font-size: 0.82rem;
                 transition: all 0.1s;
             }
             .day-quick-input:hover {
@@ -606,7 +614,7 @@
             .day-inline-time-wrap {
                 display: none;
                 position: relative;
-                width: 36px;
+                width: 34px;
                 height: 22px;
                 flex-shrink: 0;
                 overflow: hidden;
@@ -631,13 +639,14 @@
                 justify-content: center;
                 width: 100%;
                 height: 100%;
-                font-size: 0.65rem;
+                font-size: 0.6rem;
                 font-weight: 600;
-                font-family: "Syne", sans-serif;
+                font-family: "SF Mono", "Menlo", "Consolas", monospace;
                 color: var(--ink3);
                 border-bottom: 1px solid var(--line2);
                 pointer-events: none;
                 white-space: nowrap;
+                letter-spacing: -0.02em;
             }
             .day-inline-time-wrap .time-label.has-val {
                 color: var(--ink);
@@ -709,25 +718,30 @@
                     margin-left: -0.15rem;
                 }
                 .task-time-btn {
-                    width: 24px;
-                    font-size: 0.62rem;
+                    width: 30px;
+                    font-size: 0.58rem;
                 }
                 .task-name-edit {
                     font-size: 0.72rem;
                 }
                 .day-quick-input {
-                    font-size: 0.78rem;
-                    padding: 0.25rem 0.35rem;
+                    font-size: 0.72rem;
+                    padding: 0.2rem 0.3rem;
+                }
+                .day-add-spacer {
+                    width: 16px;
+                    margin-left: -0.15rem;
+                    margin-right: 0.05rem;
                 }
                 .day-inline-time-wrap {
-                    width: 32px;
+                    width: 30px;
                     height: 20px;
                 }
                 .day-inline-time-wrap .time-label {
-                    font-size: 0.6rem;
+                    font-size: 0.55rem;
                 }
                 .day-add-row {
-                    gap: 0.25rem;
+                    gap: 0.15rem;
                 }
                 .day-add-confirm {
                     padding: 0.2rem 0.45rem;
@@ -2397,6 +2411,8 @@
             }
 
             function showDayTimeInputs(ds) {
+                var spacer = document.getElementById("qsp-" + ds);
+                if (spacer) spacer.style.display = "block";
                 var wrap = document.getElementById("qtw-" + ds);
                 if (wrap) wrap.classList.add("show");
                 var addBtn = document.getElementById("qa-" + ds);
@@ -2455,6 +2471,7 @@
                 var timeInp = document.getElementById("qf-" + ds);
                 var wrap = document.getElementById("qtw-" + ds);
                 var label = document.getElementById("qtl-" + ds);
+                var spacer = document.getElementById("qsp-" + ds);
                 var xBtn = document.getElementById("qx-" + ds);
                 var addBtn = document.getElementById("qa-" + ds);
                 if (inp) {
@@ -2470,6 +2487,7 @@
                     label.textContent = "--:--";
                     label.classList.remove("has-val");
                 }
+                if (spacer) spacer.style.display = "none";
                 if (xBtn) xBtn.style.display = "none";
                 if (addBtn) addBtn.style.display = "none";
             }
@@ -3029,6 +3047,10 @@
                             ds +
                             '\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
                     } else {
+                        rowHtml +=
+                            '<div class="day-add-spacer" id="qsp-' +
+                            ds +
+                            '" style="display:none"></div>';
                         rowHtml +=
                             '<div class="day-inline-time-wrap" id="qtw-' +
                             ds +
