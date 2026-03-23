@@ -578,7 +578,7 @@
             .day-add-row {
                 display: flex;
                 align-items: center;
-                gap: 0.4rem;
+                gap: 0.25rem;
             }
             .day-quick-input {
                 flex: 1;
@@ -605,19 +605,23 @@
             }
             .day-inline-time {
                 display: none;
-                width: 70px;
-                padding: 0.2rem 0.3rem;
-                font-size: 0.75rem;
+                width: 40px;
+                max-width: 40px;
+                padding: 0.15rem 0.2rem;
+                font-size: 0.7rem;
+                font-weight: 600;
                 font-family: "Syne", sans-serif;
-                border: 1px solid var(--line2);
-                border-radius: var(--r-sm);
-                background: var(--bg);
+                border: none;
+                border-bottom: 1px solid var(--line2);
+                border-radius: 0;
+                background: transparent;
                 color: var(--ink);
                 flex-shrink: 0;
                 -webkit-appearance: none;
+                text-align: center;
             }
             .day-inline-time:focus {
-                border-color: var(--ink);
+                border-bottom-color: var(--ink);
                 outline: none;
             }
             .day-inline-time.show {
@@ -700,9 +704,10 @@
                     padding: 0.25rem 0.35rem;
                 }
                 .day-inline-time {
-                    width: 58px;
-                    font-size: 0.7rem;
-                    padding: 0.15rem 0.2rem;
+                    width: 36px;
+                    max-width: 36px;
+                    font-size: 0.65rem;
+                    padding: 0.1rem 0.1rem;
                 }
                 .day-add-row {
                     gap: 0.25rem;
@@ -2359,7 +2364,16 @@
                 var name = inp ? inp.value.trim() : "";
                 if (!name) return;
                 var fr = document.getElementById("qf-" + ds);
-                var fromVal = fr ? fr.value : "";
+                var fromVal = fr ? fr.value.trim() : "";
+                // Validate HH:MM format
+                if (fromVal && !/^\d{1,2}:\d{2}$/.test(fromVal)) fromVal = "";
+                if (fromVal) {
+                    var parts = fromVal.split(":");
+                    var h = parseInt(parts[0], 10);
+                    var m = parseInt(parts[1], 10);
+                    if (h > 23 || m > 59) fromVal = "";
+                    else fromVal = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+                }
                 pushUndo();
                 S.tasks.push({
                     id: Date.now(),
@@ -2382,6 +2396,14 @@
                 if (xBtn) xBtn.style.display = "block";
                 var inp = document.getElementById("qi-" + ds);
                 if (inp) inp.focus();
+            }
+
+            function formatTimeInput(el) {
+                var v = el.value.replace(/[^\d]/g, "");
+                if (v.length >= 3) {
+                    v = v.substring(0, 2) + ":" + v.substring(2, 4);
+                }
+                el.value = v.substring(0, 5);
             }
 
             function onDayKeydown(e, ds) {
@@ -2989,11 +3011,11 @@
                             '\')" style="background:var(--blue-bg);border-color:var(--blue);color:var(--blue);cursor:pointer;border-style:dashed">';
                     } else {
                         rowHtml +=
-                            '<input type="time" class="day-inline-time" id="qf-' +
+                            '<input type="text" class="day-inline-time" id="qf-' +
                             ds +
-                            '" value="" onblur="onDayTimeBlur(\'' +
+                            '" value="" placeholder="--:--" inputmode="numeric" maxlength="5" onblur="onDayTimeBlur(\'' +
                             ds +
-                            '\')">';
+                            '\')" oninput="formatTimeInput(this)">';
                         rowHtml +=
                             '<input class="day-quick-input" id="qi-' +
                             ds +
