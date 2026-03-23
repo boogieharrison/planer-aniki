@@ -2381,7 +2381,8 @@
                 var name = inp ? inp.value.trim() : "";
                 if (!name) return;
                 var fr = document.getElementById("qf-" + ds);
-                var fromVal = fr ? fr.value : "";
+                var wrap = document.getElementById("qtw-" + ds);
+                var fromVal = (wrap && wrap.dataset.changed === "1" && fr) ? fr.value : "";
                 pushUndo();
                 S.tasks.push({
                     id: Date.now(),
@@ -2409,14 +2410,11 @@
             function onInlineTimeChange(ds) {
                 var timeInp = document.getElementById("qf-" + ds);
                 var label = document.getElementById("qtl-" + ds);
+                var wrap = document.getElementById("qtw-" + ds);
                 if (timeInp && label) {
-                    if (timeInp.value) {
-                        label.textContent = timeInp.value.substring(0, 5);
-                        label.classList.add("has-val");
-                    } else {
-                        label.textContent = "--:--";
-                        label.classList.remove("has-val");
-                    }
+                    if (wrap) wrap.dataset.changed = "1";
+                    label.textContent = timeInp.value.substring(0, 5);
+                    label.classList.add("has-val");
                 }
             }
 
@@ -2444,9 +2442,9 @@
                     var dar = document.getElementById("dar-" + ds);
                     if (dar && dar.contains(active)) return;
                     var inp = document.getElementById("qi-" + ds);
-                    var timeInp = document.getElementById("qf-" + ds);
-                    // Don't cancel if time input has a value (user filled time first)
-                    if (timeInp && timeInp.value) return;
+                    var wrap = document.getElementById("qtw-" + ds);
+                    // Don't cancel if user already picked a time
+                    if (wrap && wrap.dataset.changed === "1") return;
                     if (inp && !inp.value.trim()) {
                         cancelDayInput(ds);
                     }
@@ -2463,8 +2461,11 @@
                     inp.value = "";
                     inp.blur();
                 }
-                if (timeInp) timeInp.value = "";
-                if (wrap) wrap.classList.remove("show");
+                if (timeInp) timeInp.value = "00:00";
+                if (wrap) {
+                    wrap.classList.remove("show");
+                    delete wrap.dataset.changed;
+                }
                 if (label) {
                     label.textContent = "--:--";
                     label.classList.remove("has-val");
@@ -2478,10 +2479,10 @@
                     var dar = document.getElementById("dar-" + ds);
                     if (dar && dar.contains(active)) return;
                     var inp = document.getElementById("qi-" + ds);
-                    var timeInp = document.getElementById("qf-" + ds);
-                    // Don't cancel if task name or time has content
+                    var wrap = document.getElementById("qtw-" + ds);
+                    // Don't cancel if task name has content or user picked a time
                     if (inp && inp.value.trim()) return;
-                    if (timeInp && timeInp.value) return;
+                    if (wrap && wrap.dataset.changed === "1") return;
                     cancelDayInput(ds);
                 }, 150);
             }
@@ -3035,7 +3036,7 @@
                             ds +
                             '">--:--</span><input type="time" id="qf-' +
                             ds +
-                            '" value="" onchange="onInlineTimeChange(\'' +
+                            '" value="00:00" onchange="onInlineTimeChange(\'' +
                             ds +
                             '\')" onblur="onDayTimeBlur(\'' +
                             ds +
